@@ -381,6 +381,37 @@ suite("collect: a truncated drop is completed from its folder", function()
   eq(withSprites, 9, "the ones already open are reused, not reopened")
 end)
 
+suite("collect: on Windows a file is not added twice for differing case", function()
+  local collect = require("collect")
+  fake.reset()
+  fake.app.fs.pathSeparator = "\\"
+  fake.dirs["/art"] = { "Hero_run_00.png", "hero_run_01.png" }
+  fake.files["/art/Hero_run_00.png"] = { width = 16, height = 16 }
+  fake.files["/art/hero_run_01.png"] = { width = 16, height = 16 }
+  local cfg = config.new()
+  -- The open sprite reports a different case than the directory listing.
+  -- The open sprite reports "hero_..." where the listing says "Hero_...".
+  local dropped = { { title = "hero_run_00", path = "/art/hero_run_00.png",
+                      sprite = fake.newSprite(16, 16, fake.ColorMode.RGB,
+                                              { filename = "/art/hero_run_00.png" }) } }
+  local merged, added = collect.completeFromFolder(dropped, cfg, config.namingOpts(cfg))
+  fake.app.fs.pathSeparator = "/"
+  eq(added, 1, "only the genuinely missing file")
+  eq(#merged, 2, "no duplicate for the case difference")
+end)
+
+suite("collect: on Linux case still distinguishes two files", function()
+  local collect = require("collect")
+  fake.reset()
+  fake.dirs["/art"] = { "Hero_run_00.png", "hero_run_00.png" }
+  fake.files["/art/Hero_run_00.png"] = { width = 16, height = 16 }
+  fake.files["/art/hero_run_00.png"] = { width = 16, height = 16 }
+  local cfg = config.new()
+  local dropped = { { title = "hero_run_00", path = "/art/hero_run_00.png" } }
+  local _, added = collect.completeFromFolder(dropped, cfg, config.namingOpts(cfg))
+  eq(added, 1, "Hero_run_00.png is a different file and is picked up")
+end)
+
 suite("collect: gaps mode only completes animations that arrived", function()
   local collect = require("collect")
   local dropped = truncatedDrop(9)   -- attack 00-04, hurt 00-01, idle 00-01

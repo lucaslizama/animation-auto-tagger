@@ -12,6 +12,17 @@ M.EXTENSIONS = {
   aseprite = true, ase = true, psd = true, svg = true,
 }
 
+-- Windows path comparison is case-insensitive, so the same file can reach us as
+-- C:\Art\hero_run_00.png from an open sprite and c:\art\Hero_run_00.png from
+-- the directory listing. Comparing verbatim would treat them as two files and
+-- add a duplicate frame. On Linux and macOS case is significant, so it is left
+-- alone there.
+function M.pathKey(path)
+  local key = app.fs.normalizePath(path)
+  if app.fs.pathSeparator == "\\" then key = key:lower() end
+  return key
+end
+
 function M.isSupported(path)
   return M.EXTENSIONS[app.fs.fileExtension(path):lower()] == true
 end
@@ -75,7 +86,7 @@ function M.completeFromFolder(entries, cfg, namingOpts)
   local have = {}
   local anims = {}
   for _, e in ipairs(entries) do
-    if e.path then have[app.fs.normalizePath(e.path)] = true end
+    if e.path then have[M.pathKey(e.path)] = true end
     local parsed = naming.parse(e.title, namingOpts)
     if parsed.ok then anims[naming.tagName(parsed, namingOpts)] = true end
   end
@@ -85,7 +96,7 @@ function M.completeFromFolder(entries, cfg, namingOpts)
 
   local added = 0
   for _, candidate in ipairs(M.fromFolder(folder)) do
-    if not have[app.fs.normalizePath(candidate.path)] then
+    if not have[M.pathKey(candidate.path)] then
       local keep = (mode == "folder")
       if not keep then
         local parsed = naming.parse(candidate.title, namingOpts)

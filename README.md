@@ -17,23 +17,57 @@ hero_run_02.png   ┘
 
 ## Install
 
-Run `./build.sh` to produce `dist/animation-auto-tagger.aseprite-extension`,
-then in Aseprite go to **Edit ▸ Preferences ▸ Extensions ▸ Add Extension** and
-pick that file. Restart Aseprite.
+### From the packaged extension
 
-While working on the extension, `./install.sh` copies it straight into
-`~/.config/aseprite/extensions/animation-auto-tagger/`, skipping the packaging
-step. Run it again after an edit and restart Aseprite.
+```sh
+./build.sh          # writes dist/animation-auto-tagger.aseprite-extension
+```
 
-It has to be a copy, not a symlink: **Aseprite does not follow a symlink when it
-scans for extensions**, and it says nothing when it skips one — the plugin just
-never appears. That path is the same for a Steam install, since Aseprite is not
-sandboxed and keeps its user data in `~/.config/aseprite/`. Uninstall by
-deleting the directory.
+`dist/` is git-ignored, so a fresh clone has to build it first. Then in Aseprite
+open **Edit ▸ Preferences ▸ Extensions ▸ Add Extension** and pick that file, and
+restart. On Windows and macOS double-clicking the file works too.
 
-Either way the commands land under **File ▸ Scripts ▸ Animation Auto-Tagger**.
-Tested against Aseprite 1.3.18.2; it needs 1.3.15 or newer for `app.tip` and
-the menu-checkbox support.
+The package is a renamed zip holding `package.json` and eight `.lua` files —
+plain text, no compiled anything, and every path it touches goes through
+`app.fs`. **A package built on one platform installs on any of them.**
+
+### By hand
+
+Copy `package.json` and the `.lua` files (the list `install.sh` and `build.sh`
+both read is in `plugin-files.txt`) into a folder inside Aseprite's extensions
+directory:
+
+| | |
+| --- | --- |
+| Linux | `~/.config/aseprite/extensions/animation-auto-tagger/` |
+| Windows | `%AppData%\Aseprite\extensions\animation-auto-tagger\` |
+| macOS | `~/Library/Application Support/Aseprite/extensions/animation-auto-tagger/` |
+
+`README.md` and `LICENSE` are along for the ride and can be left out. On Linux
+`./install.sh` does all of this; run it again after an edit and restart Aseprite.
+
+It has to be a real folder, **not a symlink**: Aseprite does not follow one when
+it scans for extensions, and it says nothing when it skips one — the plugin just
+never appears. Uninstall by deleting the folder.
+
+Not sure where the directory is on a given machine? Ask Aseprite:
+
+```sh
+aseprite --batch --script <(echo 'print(app.fs.userConfigPath)')
+```
+
+### Check it loaded
+
+Restart, then look for **File ▸ Scripts ▸ Animation Auto-Tagger**. Without the
+GUI:
+
+```sh
+aseprite --batch --script <(echo 'for k in pairs(_LOADED) do
+  if tostring(k):find("animation-auto-tagger") then print(k) end end')
+```
+
+That should list seven modules. Tested against Aseprite 1.3.18.2; it needs
+1.3.15 or newer for `app.tip` and the menu-checkbox support.
 
 ## About dragging files in
 
