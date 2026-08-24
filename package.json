@@ -1,0 +1,20 @@
+{
+  "name": "animation-auto-tagger",
+  "displayName": "Animation Auto-Tagger",
+  "description": "Turns a pile of name_animation_00 sprite files into one sprite with a tagged, ordered timeline.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Lucas Lizama"
+  },
+  "license": "MIT",
+  "categories": [
+    "Scripts"
+  ],
+  "contributes": {
+    "scripts": [
+      {
+        "path": "./main.lua"
+      }
+    ]
+  }
+}

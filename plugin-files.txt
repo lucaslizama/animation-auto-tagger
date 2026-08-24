@@ -1,0 +1,11 @@
+package.json
+main.lua
+naming.lua
+config.lua
+collect.lua
+sources.lua
+builder.lua
+ui.lua
+watcher.lua
+README.md
+LICENSE
