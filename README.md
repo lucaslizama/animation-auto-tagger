@@ -25,7 +25,13 @@ scripts/build.sh    # writes dist/animation-auto-tagger.aseprite-extension
 
 `dist/` is git-ignored, so a fresh clone has to build it first. Then in Aseprite
 open **Edit ▸ Preferences ▸ Extensions ▸ Add Extension** and pick that file, and
-restart. On Windows and macOS double-clicking the file works too.
+restart.
+
+**Upgrading over an older copy, remove it first.** Installing on top can leave
+old files behind, and a half-updated extension fails with a missing function
+rather than anything that explains itself. The plugin now notices and says so,
+but deleting the extension folder before installing avoids the situation
+entirely. On Windows and macOS double-clicking the file works too.
 
 The package is a renamed zip holding `package.json` and eight `.lua` files —
 plain text, no compiled anything, and every path it touches goes through

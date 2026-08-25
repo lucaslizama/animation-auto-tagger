@@ -15,7 +15,63 @@ local state = {
   plugin = nil,
   cfg    = nil,
   watch  = nil,
+  broken = nil,   -- set when the installed files do not belong together
 }
+
+-- Installing over an older copy can leave some files replaced and others not,
+-- and a half-updated extension shows up as a missing function deep inside a
+-- callback: "attempt to call a nil value (field 'groupLines')" reads as a bug
+-- in the plugin rather than as what it is. Everything this file reaches for is
+-- checked once, up front, so the report says what to do about it instead.
+local NEEDED = {
+  ui = { "run", "show", "showReorder", "summaryLine", "groupLines", "noteLines",
+         "frameTotal" },
+  collect = { "commonFolder", "completeFromFolder", "fromFolder", "fromSprites" },
+  naming = { "group" },
+  config = { "load", "save", "namingOpts" },
+  watcher = { "new" },
+}
+
+--- The functions this file needs that the installed modules do not have.
+local function missingPieces()
+  local modules = { ui = ui, collect = collect, naming = naming,
+                    config = config, watcher = watcher }
+  local missing = {}
+  for _, name in ipairs({ "ui", "collect", "naming", "config", "watcher" }) do
+    local mod = modules[name]
+    for _, fn in ipairs(NEEDED[name]) do
+      if type(mod) ~= "table" or type(mod[fn]) ~= "function" then
+        missing[#missing + 1] = name .. "." .. fn
+      end
+    end
+  end
+  return missing
+end
+
+--- Say so once, rather than on every drop.
+local function reportBroken()
+  if not state.broken or state.broken.told then return true end
+  state.broken.told = true
+  local text = {
+    "This copy of Animation Auto-Tagger is part new and part old,",
+    "so some of it is missing:",
+    "",
+  }
+  for i, name in ipairs(state.broken) do
+    if i > 6 then
+      text[#text + 1] = ("(and %d more)"):format(#state.broken - 6)
+      break
+    end
+    text[#text + 1] = "  " .. name
+  end
+  text[#text + 1] = ""
+  text[#text + 1] = "Installing over an older copy can leave old files behind."
+  text[#text + 1] = "Delete the extension folder, then install it again:"
+  text[#text + 1] = ""
+  text[#text + 1] = "  " .. app.fs.joinPath(app.fs.userConfigPath, "extensions")
+  app.alert { title = "Animation Auto-Tagger", text = text }
+  return true
+end
 
 local function saveConfig(cfg)
   state.cfg = cfg
@@ -37,6 +93,8 @@ end
 
 --- Called once a batch of newly opened sprites has settled.
 local function onBatch(sprites)
+  if state.broken then return reportBroken() end
+
   local cfg = state.cfg
   local dropped = collect.fromSprites(sprites)
   if #dropped == 0 then return end
@@ -214,7 +272,19 @@ function init(plugin)
   state.plugin = plugin
   state.cfg = config.load(plugin)
 
-  if Timer ~= nil then
+  -- Checked before anything is wired up. The menu commands are still
+  -- registered, so the report has somewhere to come from rather than the
+  -- plugin simply appearing not to exist.
+  local missing = missingPieces()
+  if #missing > 0 then
+    state.broken = missing
+    -- Printed as well as alerted: the console is what someone copies into a
+    -- bug report, and it says this at load rather than waiting for a drop.
+    print(("Animation Auto-Tagger: this install is part new and part old, missing %s")
+      :format(table.concat(missing, ", ")))
+  end
+
+  if Timer ~= nil and not state.broken then
     state.watch = watcher.new {
       getConfig = function() return state.cfg end,
       onBatch   = onBatch,
@@ -232,6 +302,7 @@ function init(plugin)
     title = "Tag Open Sprites...",
     group = "anim_auto_tagger",
     onclick = function()
+      if state.broken then return reportBroken() end
       local entries = collect.fromSprites(app.sprites)
       openDialog(entries, collect.commonFolder(entries), "Tag Open Sprites")
     end,
@@ -242,6 +313,7 @@ function init(plugin)
     title = "Tag Frames in a Folder...",
     group = "anim_auto_tagger",
     onclick = function()
+      if state.broken then return reportBroken() end
       local entries = {}
       local folder = state.cfg.lastFolder
       if folder ~= "" and app.fs.isDirectory(folder) then
@@ -257,6 +329,7 @@ function init(plugin)
     group = "anim_auto_tagger",
     onenabled = function() return app.sprite ~= nil and #app.sprite.tags > 1 end,
     onclick = function()
+      if state.broken then return reportBroken() end
       ui.showReorder(app.sprite)
     end,
   }

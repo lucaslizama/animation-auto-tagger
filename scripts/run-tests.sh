@@ -76,6 +76,34 @@ if [ -n "$ASEPRITE" ]; then
   # shellcheck disable=SC2086
   run_e2e "end-to-end, drag path (files opened by Aseprite itself)" \
     "$ASEPRITE" --batch "$SAMPLES"/*.png --script tests/e2e_dragpath.lua
+  # A half-updated install has to announce itself rather than failing later
+  # with a nil function inside a callback. Simulated by taking one function
+  # away from the packaged ui.lua, which is what a stale file amounts to.
+  echo
+  echo "== half-updated install is reported =="
+  ./scripts/build.sh >/dev/null
+  MIXED="$(mktemp -d)"
+  mkdir -p "$MIXED/extensions/animation-auto-tagger"
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q dist/animation-auto-tagger.aseprite-extension \
+      -d "$MIXED/extensions/animation-auto-tagger"
+    # Demoted to an unused local, so the module still parses but no longer
+    # exposes it. Appending after the file's own return would not even compile.
+    sed -i 's/^function M\.groupLines(/local function groupLines_gone(/' \
+      "$MIXED/extensions/animation-auto-tagger/ui.lua"
+    said="$(ASEPRITE_USER_FOLDER="$MIXED" "$ASEPRITE" --batch \
+            --script tests/noop.lua 2>&1 | grep -c 'part new and part old' || true)"
+    if [ "$said" -ge 1 ]; then
+      echo "  ok, it said so"
+    else
+      echo "  FAIL: a half-updated install was not reported" >&2
+      e2e_failed=1
+    fi
+  else
+    echo "  (skipped, unzip not available)"
+  fi
+  rm -rf "$MIXED"
+
   if [ "$e2e_failed" -ne 0 ]; then
     echo
     echo "end-to-end suite failed" >&2

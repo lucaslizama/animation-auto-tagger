@@ -146,7 +146,8 @@ manifest and a handful of Lua files, so the same file installs on Windows, macOS
 and Linux.
 
 Install through **Edit ▸ Preferences ▸ Extensions ▸ Add Extension**, then
-restart. On Windows and macOS, double-clicking the file works too. The commands
+restart. If an older copy is already installed, remove it first: installing on
+top of it can leave old files behind. On Windows and macOS, double-clicking the file works too. The commands
 appear under **File ▸ Scripts**.
 
 ### Source

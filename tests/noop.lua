@@ -1,0 +1,2 @@
+-- Does nothing. Aseprite needs a script to run for the extensions to load, and
+-- the half-updated-install check only cares about what they print on the way.
