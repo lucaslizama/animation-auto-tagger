@@ -23,6 +23,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Push to itch as well as building (for testing the pipeline)"
+        type: boolean
+        default: false
 
 jobs:
   publish:
@@ -59,6 +64,17 @@ jobs:
       - name: Build the extension
         run: scripts/build.sh
 
+      # butler takes a directory: "Directory to upload. May also be a zip
+      # archive". A single loose file is not one of those, and pushing one was
+      # accepted, reported as processing, and then silently amounted to no
+      # channel at all. So the file goes in a directory of its own.
+      - name: Stage the upload
+        run: |
+          rm -rf dist/upload
+          mkdir -p dist/upload
+          cp dist/animation-auto-tagger.aseprite-extension dist/upload/
+          ls -l dist/upload
+
       # Kept whether or not the push happens, so a failed publish still leaves
       # the exact file behind to look at.
       - name: Keep the package with the run
@@ -94,7 +110,7 @@ jobs:
           butler/butler status "$ITCH_TARGET" || true
 
       - name: Push to itch.io
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
@@ -112,7 +128,8 @@ jobs:
             *) echo "ITCH_TARGET should look like user/game:channel, got $ITCH_TARGET" >&2; exit 1 ;;
           esac
 
+          version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -1)"
           butler/butler push \
-            dist/animation-auto-tagger.aseprite-extension \
+            dist/upload \
             "$ITCH_TARGET" \
-            --userversion "${GITHUB_REF_NAME#v}"
+            --userversion "$version"
