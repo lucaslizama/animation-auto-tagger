@@ -13,6 +13,7 @@ M.COLOR_MODES  = { "rgb", "gray", "indexed", "same as first source" }
 M.ANI_DIRS     = { "forward", "reverse", "ping-pong", "ping-pong-reverse" }
 M.COMPLETE_DROPS = { "folder", "gaps", "off" }
 M.BUILD_TARGETS  = { "new sprite", "an open sprite" }
+M.EXISTING_TAGS  = { "append", "replace" }
 
 M.defaults = {
   ---------------------------------------------------------------- naming
@@ -28,6 +29,7 @@ M.defaults = {
   frameDurationMs   = 100,
   keepSourceDurations = false,
   buildTarget       = "new sprite",   -- or "an open sprite", to append instead
+  existingTags      = "append",       -- or "replace", to refresh matching tags
   canvasMode        = "max",
   canvasWidth       = 64,     -- only read when canvasMode is "custom"
   canvasHeight      = 64,

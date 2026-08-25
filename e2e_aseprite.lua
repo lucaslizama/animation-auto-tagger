@@ -353,6 +353,59 @@ reports8[1].sprite:close()
 sources.release(pool8, customCfg)
 
 --------------------------------------------------------------------------
+-- Replacing tags that are already on the sprite. Whether Aseprite really
+-- pulls every later tag along as frames are inserted and deleted is the part
+-- no stand-in can answer.
+--------------------------------------------------------------------------
+
+local function layoutOf(sprite)
+  local out = {}
+  for _, t in ipairs(sprite.tags) do
+    local f, l = tagRange(t)
+    out[#out + 1] = ("%s %d-%d"):format(t.name, f, l)
+  end
+  return table.concat(out, "  ")
+end
+
+local host = Sprite(40, 32, ColorMode.RGB)
+host.layers[1].name = "hero"
+for i = 2, 9 do host:newEmptyFrame(i) end
+host:newTag(1, 3).name = "idle"    -- the samples hold 4 idle frames
+host:newTag(4, 6).name = "run"     -- and 6 run frames
+host:newTag(7, 9).name = "spin"    -- nothing imported matches this one
+eq(layoutOf(host), "idle 1-3  run 4-6  spin 7-9", "host starts as expected")
+
+local replaceCfg = config.new()
+replaceCfg.closeSources = false
+replaceCfg.existingTags = "replace"
+
+local pool11 = sources.newPool()
+local reports11, errors11 = builder.buildAll(
+  naming.group(collect.fromFolder(samples), config.namingOpts(replaceCfg)), replaceCfg,
+  { pool = pool11, folder = samples, target = host })
+for _, e in ipairs(errors11) do print("  error: " .. e) end
+eq(#errors11, 0, "no errors")
+
+-- idle 3->4 and run 3->6 grow; attack, hurt and jump have no tag to match and
+-- go on the end. spin keeps its frames and is pushed along by the growth.
+eq(layoutOf(host),
+   "idle 1-4  run 5-10  spin 11-13  attack 14-18  hurt 19-20  jump 21-23",
+   "matching tags grew in place, the rest were appended")
+eq(#host.frames, 23, "9 existing + 4 grown + 10 appended")
+eq(reports11[1].replaced, 2, "two tags replaced")
+eq(#host.layers, 1, "the layer named hero was reused, not duplicated")
+
+local filled = 0
+for f = 1, 10 do
+  local cel = host.layers[1]:cel(f)
+  if cel and not cel.image:isEmpty() then filled = filled + 1 end
+end
+eq(filled, 10, "every replaced frame carries pixels")
+
+sources.release(pool11, replaceCfg)
+host:close()
+
+--------------------------------------------------------------------------
 -- Appending a sprite into itself has to be refused, not attempted.
 --------------------------------------------------------------------------
 

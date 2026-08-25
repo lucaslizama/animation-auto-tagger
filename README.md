@@ -216,6 +216,7 @@ pattern needs either two captures `(animation)(index)` or three
 | Option | What it does |
 | --- | --- |
 | Build into | A new sprite, or one already open — see below |
+| Existing tags | When building into an open sprite: add alongside, or replace matching |
 | Frame duration | Milliseconds per frame (default 100) |
 | Keep source durations | For multi-frame sources, copy their timing instead |
 | Canvas size | Largest source frame, the first one, or a size you type |
@@ -256,7 +257,28 @@ is different: it is a number you typed, so it is honoured even when it is
 smaller than the sprite — but because that crops art which was there first, it
 asks before doing it, and cancelling builds nothing.
 
-Two things are worth knowing. A sprite cannot be appended to itself — if the
+### Replacing what is already there
+
+**Existing tags ▸ replace matching** treats the import as an update rather than
+an addition. An animation whose name matches a tag already on the sprite is
+written over the frames that tag spans, and the tag is resized to fit: import
+six `run` frames over a tag holding three and it grows to six, with every tag
+after it sliding down to make room. Anything with no matching tag is added at
+the end as usual.
+
+The tag itself is left alone — its name, direction and colour are yours; only
+the frames beneath it change. A layer of the same name is reused too, so
+re-importing a character refreshes one layer instead of stacking up a new one
+each time.
+
+One thing to be careful of: when the import has **fewer** frames than the tag
+held, the surplus frames are deleted outright, and deleting a frame takes every
+layer's cel on it, not just the imported one. That is reported in the result,
+and one undo takes it all back.
+
+### Other things worth knowing
+
+A sprite cannot be appended to itself — if the
 target is also one of the frames going in, the build is refused rather than
 reading half-written frames back into itself. And appending into an **indexed**
 sprite can shift colours: each source is quantized against a palette of its own,

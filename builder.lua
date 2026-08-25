@@ -111,6 +111,18 @@ function M.targetConflict(groups, target)
   return nil
 end
 
+local function layerNamed(sprite, name)
+  for _, l in ipairs(sprite.layers) do
+    if l.name == name then return l end
+  end
+end
+
+local function tagNamed(sprite, name)
+  for _, t in ipairs(sprite.tags) do
+    if t.name == name then return t end
+  end
+end
+
 --- Build one sprite from a list of groups.
 --
 -- `groups` must already carry `refs` (see sources.expand). Returns a report:
@@ -195,11 +207,21 @@ function M.build(groups, cfg, opts)
 
   -- `frameBase` is how many frames were already there: 0 for a new sprite, so
   -- the append and build paths share every index below.
+  local layerName = (cfg.layerName ~= "" and cfg.layerName)
+                 or (opts.baseName ~= "" and opts.baseName)
+                 or "Animation"
+
+  -- Replacing reuses a layer of that name when the sprite already has one, so
+  -- importing the same character a second time refreshes it rather than
+  -- stacking another copy on top.
+  local replacing = target ~= nil and cfg.existingTags == "replace"
+
   local dest, frameBase, layer
   if target then
     dest, frameBase = target, #target.frames
-    -- A new layer, never dest.layers[1] -- that one holds the user's own art.
-    layer = dest:newLayer()
+    if replacing then layer = layerNamed(dest, layerName) end
+    -- Never dest.layers[1] by default -- that one holds the user's own art.
+    layer = layer or dest:newLayer()
   else
     dest, frameBase = Sprite(canvasW, canvasH, buildEnum), 0
     if keepIndices and survey.palette then
@@ -208,11 +230,9 @@ function M.build(groups, cfg, opts)
     end
     layer = dest.layers[1]
   end
-  layer.name = (cfg.layerName ~= "" and cfg.layerName)
-            or (opts.baseName ~= "" and opts.baseName)
-            or "Animation"
+  layer.name = layerName
 
-  local total, tags = 0, {}
+  local total, tags, replacedCount = 0, {}, 0
   for _, group in ipairs(groups) do total = total + #group.refs end
 
   local aniDir = (ANI_DIRS[cfg.aniDir] or ANI_DIRS["forward"])()
@@ -221,18 +241,117 @@ function M.build(groups, cfg, opts)
   -- Aseprite lets two tags share a name, and the second one is then all but
   -- impossible to tell apart on the timeline. Worth saying so.
   local taken = {}
-  -- Inserting a frame just past a tag's last frame makes that tag swallow it,
-  -- so a sprite tagged 1-3 would come to own every frame appended below. The
-  -- ranges are noted here and put back once the new frames exist.
-  local held = {}
-  if target then
-    for _, t in ipairs(target.tags) do
-      taken[t.name] = true
-      held[#held + 1] = { tag = t, from = t.fromFrame.frameNumber, to = t.toFrame.frameNumber }
-    end
+  if target and not replacing then
+    for _, t in ipairs(target.tags) do taken[t.name] = true end
   end
 
   local resized, wasW, wasH = false, target and target.width, target and target.height
+
+  --- Draw one source frame onto `layer` at `frameNumber`.
+  local function placeRef(frameNumber, ref)
+    local src = ref.image or ref.sprite
+    local img = Image(src.width, src.height, buildEnum)
+    if ref.image then
+      -- Always into a fresh image, never the cached one: the same file can
+      -- appear in two groups, and a cel must not share pixels with another.
+      img:drawImage(ref.image, Point(0, 0))
+    else
+      img:drawSprite(src, ref.frame)
+    end
+
+    local dx, dy = offsetFor(cfg.align, canvasW, canvasH, src.width, src.height)
+    if src.width > canvasW or src.height > canvasH then
+      warnings[#warnings + 1] = ("%s is %dx%d, larger than the %dx%d canvas; it will be cropped")
+        :format(ref.item.title, src.width, src.height, canvasW, canvasH)
+    end
+
+    local existing = layer:cel(frameNumber)
+    if existing then dest:deleteCel(existing) end
+    dest:newCel(layer, frameNumber, img, Point(dx, dy))
+
+    local frame = dest.frames[frameNumber]
+    if cfg.keepSourceDurations and ref.sprite then
+      frame.duration = src.frames[ref.frame].duration
+    else
+      -- A still frame carries no timing of its own to keep.
+      frame.duration = duration
+    end
+  end
+
+  --- Tag ranges as they stand, and putting them back afterwards.
+  --
+  -- Inserting a frame just past a tag's last frame makes that tag swallow it,
+  -- so a sprite tagged 1-3 would come to own everything appended below. Frames
+  -- added at the very end must move no existing tag at all.
+  local function heldRanges()
+    local held = {}
+    for _, t in ipairs(dest.tags) do
+      held[#held + 1] = { tag = t, from = t.fromFrame.frameNumber, to = t.toFrame.frameNumber }
+    end
+    return held
+  end
+  local function restoreRanges(held)
+    for _, h in ipairs(held) do
+      h.tag.fromFrame = dest.frames[h.from]
+      h.tag.toFrame   = dest.frames[h.to]
+    end
+  end
+
+  --- Put a group at the end of the timeline under a tag of its own.
+  local function appendGroup(group)
+    local start = #dest.frames + 1
+    local held = heldRanges()
+    for _ = 1, #group.refs do dest:newEmptyFrame(#dest.frames + 1) end
+    restoreRanges(held)
+
+    for i, ref in ipairs(group.refs) do placeRef(start + i - 1, ref) end
+
+    if taken[group.name] then
+      warnings[#warnings + 1] =
+        ("the target sprite already has a tag named %s; there are now two")
+          :format(group.name)
+    end
+
+    local tag = dest:newTag(start, start + #group.refs - 1)
+    tag.name = group.name
+    tag.aniDir = aniDir
+    if cfg.colorizeTags then
+      local c = config.TAG_COLORS[((#tags) % #config.TAG_COLORS) + 1]
+      tag.color = Color { r = c[1], g = c[2], b = c[3] }
+    end
+    tags[#tags + 1] = { name = group.name, from = start,
+                        to = start + #group.refs - 1, count = #group.refs }
+  end
+
+  --- Refresh the frames an existing tag already spans.
+  --
+  -- The tag itself is left alone -- its name, direction and colour are the
+  -- user's -- and only the frames under it change. Aseprite moves every tag
+  -- after this one as frames are inserted or deleted, so nothing downstream
+  -- has to be fixed up by hand.
+  local function replaceGroup(group, tag)
+    local from = tag.fromFrame.frameNumber
+    local have = tag.toFrame.frameNumber - from + 1
+    local want = #group.refs
+
+    for _ = 1, want - have do
+      dest:newEmptyFrame(tag.toFrame.frameNumber + 1)
+    end
+    for _ = 1, have - want do
+      dest:deleteFrame(tag.toFrame.frameNumber)
+    end
+    if want < have then
+      warnings[#warnings + 1] =
+        ("%s went from %d frames to %d; the %d removed took any other layer's cels with them")
+          :format(group.name, have, want, have - want)
+    end
+
+    for i, ref in ipairs(group.refs) do placeRef(from + i - 1, ref) end
+
+    replacedCount = replacedCount + 1
+    tags[#tags + 1] = { name = group.name, from = from, to = from + want - 1,
+                        count = want, replaced = true }
+  end
 
   app.transaction(target and "Append tagged animation" or "Build tagged animation", function()
     if target then
@@ -240,65 +359,33 @@ function M.build(groups, cfg, opts)
       if resizeCanvas(dest, canvasW, canvasH, cfg.align) then
         resized = true
       end
-      for i = 1, total do dest:newEmptyFrame(frameBase + i) end
-      for _, h in ipairs(held) do
-        h.tag.fromFrame = dest.frames[h.from]
-        h.tag.toFrame   = dest.frames[h.to]
+
+      for _, group in ipairs(groups) do
+        local tag = replacing and tagNamed(dest, group.name) or nil
+        if tag then replaceGroup(group, tag) else appendGroup(group) end
       end
-    else
-      for i = 2, total do dest:newEmptyFrame(i) end
+      return
     end
+
+    for i = 2, total do dest:newEmptyFrame(i) end
 
     local frameIndex = 0
     for _, group in ipairs(groups) do
       local from = frameIndex + 1
       for _, ref in ipairs(group.refs) do
         frameIndex = frameIndex + 1
-
-        local src = ref.image or ref.sprite
-        local img = Image(src.width, src.height, buildEnum)
-        if ref.image then
-          -- Always into a fresh image, never the cached one: the same file can
-          -- appear in two groups, and a cel must not share pixels with another.
-          img:drawImage(ref.image, Point(0, 0))
-        else
-          img:drawSprite(src, ref.frame)
-        end
-
-        local dx, dy = offsetFor(cfg.align, canvasW, canvasH, src.width, src.height)
-        if src.width > canvasW or src.height > canvasH then
-          warnings[#warnings + 1] = ("%s is %dx%d, larger than the %dx%d canvas; it will be cropped")
-            :format(ref.item.title, src.width, src.height, canvasW, canvasH)
-        end
-
-        local existing = layer:cel(frameBase + frameIndex)
-        if existing then dest:deleteCel(existing) end
-        dest:newCel(layer, frameBase + frameIndex, img, Point(dx, dy))
-
-        local frame = dest.frames[frameBase + frameIndex]
-        if cfg.keepSourceDurations and ref.sprite then
-          frame.duration = src.frames[ref.frame].duration
-        else
-          -- A still frame carries no timing of its own to keep.
-          frame.duration = duration
-        end
+        placeRef(frameIndex, ref)
       end
 
-      if taken[group.name] then
-        warnings[#warnings + 1] =
-          ("the target sprite already has a tag named %s; there are now two")
-            :format(group.name)
-      end
-
-      local tag = dest:newTag(frameBase + from, frameBase + frameIndex)
+      local tag = dest:newTag(from, frameIndex)
       tag.name = group.name
       tag.aniDir = aniDir
       if cfg.colorizeTags then
         local c = config.TAG_COLORS[((#tags) % #config.TAG_COLORS) + 1]
         tag.color = Color { r = c[1], g = c[2], b = c[3] }
       end
-      tags[#tags + 1] = { name = group.name, from = frameBase + from,
-                          to = frameBase + frameIndex, count = #group.refs }
+      tags[#tags + 1] = { name = group.name, from = from, to = frameIndex,
+                          count = #group.refs }
     end
   end)
 
@@ -339,6 +426,7 @@ function M.build(groups, cfg, opts)
     canvas   = { width = canvasW, height = canvasH },
     colorMode = targetMode,
     appended = target ~= nil,
+    replaced = replacedCount,
     firstFrame = frameBase + 1,
   }
 end

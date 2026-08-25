@@ -24,6 +24,10 @@ local GROUP_ORDERS = {
   { "alphabetical", "alphabetical" },
   { "file order",   "first-seen" },
 }
+local EXISTING_TAGS = {
+  { "add alongside",   "append" },
+  { "replace matching", "replace" },
+}
 local CANVAS_MODES = {
   { "largest source frame", "max" },
   { "first source frame",   "first" },
@@ -158,6 +162,7 @@ local function readConfig(dlg, base)
   cfg.keepSourceDurations = d.keepSourceDurations
   cfg.buildTarget       = d.buildTarget
   cfg.targetLabel       = d.targetSprite   -- runtime only, never persisted
+  cfg.existingTags      = valueFor(EXISTING_TAGS, d.existingTags)
   cfg.canvasMode        = valueFor(CANVAS_MODES, d.canvasMode)
   cfg.canvasWidth       = math.max(1, math.floor(tonumber(d.canvasWidth) or 1))
   cfg.canvasHeight      = math.max(1, math.floor(tonumber(d.canvasHeight) or 1))
@@ -475,10 +480,14 @@ function M.show(opts)
     option = activeLabel, options = targetLabels,
     enabled = #targetChoices > 0,
   }
+  dlg:combobox {
+    id = "existingTags", label = "Existing tags",
+    option = labelFor(EXISTING_TAGS, cfg.existingTags), options = labelsOf(EXISTING_TAGS),
+  }
   dlg:newrow()
   dlg:label {
     label = "",
-    text = "appending adds a layer and keeps that sprite's own canvas and color mode",
+    text = "replacing refreshes the frames a tag of the same name already spans",
   }
 
   dlg:number {

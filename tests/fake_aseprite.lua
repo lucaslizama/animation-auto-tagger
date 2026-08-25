@@ -119,6 +119,37 @@ function Sprite:newLayer()
   return layer
 end
 
+-- Aseprite pulls tags back with the frames as they go, exactly as it pushes
+-- them along on an insert.
+function Sprite:deleteFrame(n)
+  local ranges = {}
+  for i, tag in ipairs(self.tags) do
+    ranges[i] = { tag.fromFrame.frameNumber, tag.toFrame.frameNumber }
+  end
+
+  table.remove(self.frames, n)
+  for i, f in ipairs(self.frames) do f.frameNumber = i end
+  for _, layer in ipairs(self.layers) do
+    local moved = {}
+    for frameNumber, cel in pairs(layer.celsByFrame) do
+      if frameNumber < n then
+        moved[frameNumber] = cel
+      elseif frameNumber > n then
+        cel.frameNumber = frameNumber - 1
+        moved[frameNumber - 1] = cel
+      end
+    end
+    layer.celsByFrame = moved
+  end
+
+  for i, tag in ipairs(self.tags) do
+    local from, to = ranges[i][1], ranges[i][2]
+    if n < from then from, to = from - 1, to - 1
+    elseif n <= to then to = to - 1 end
+    tag.fromFrame, tag.toFrame = self.frames[from], self.frames[to]
+  end
+end
+
 function Sprite:newCel(layer, frame, image, position)
   local cel = { layer = layer, frameNumber = frame, image = image,
                 position = position or Point(0, 0), sprite = self }

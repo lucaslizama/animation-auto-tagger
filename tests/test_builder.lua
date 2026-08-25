@@ -74,6 +74,40 @@ local function appendFrom(specs, overrides, target, buildOpts)
   return reports, errors, dest
 end
 
+--- Build into a sprite whose tags are laid out as { name, from, to }.
+local function replaceFrom(specs, tagSpecs, targetOpts, overrides)
+  targetOpts = targetOpts or {}
+  local entries = withFiles(specs)   -- resets the fake, so the target comes after
+  local dest = fake.newSprite(targetOpts.width or 16, targetOpts.height or 16,
+    fake.ColorMode.RGB,
+    { filename = "/art/scene.aseprite", frameCount = targetOpts.frameCount or 9 })
+  if targetOpts.layerName then dest.layers[1].name = targetOpts.layerName end
+  for _, t in ipairs(tagSpecs) do
+    local tag = dest:newTag(t[2], t[3])
+    tag.name = t[1]
+    if t[4] then tag.aniDir = t[4] end
+  end
+
+  local cfg = config.new()
+  cfg.buildTarget = "an open sprite"
+  cfg.existingTags = "replace"
+  for k, v in pairs(overrides or {}) do cfg[k] = v end
+
+  local grouped = naming.group(entries, config.namingOpts(cfg))
+  local reports, errors = builder.buildAll(grouped, cfg,
+    { pool = sources.newPool(), folder = "/art", target = dest })
+  return reports, errors, dest
+end
+
+--- A sprite's tags as "name from-to", in order.
+local function tagLayout(sprite)
+  local out = {}
+  for _, t in ipairs(sprite.tags) do
+    out[#out + 1] = ("%s %d-%d"):format(t.name, t.fromFrame.frameNumber, t.toFrame.frameNumber)
+  end
+  return table.concat(out, "  ")
+end
+
 --- The tag with `name` in a report, or nil.
 local function tagNamed(report, name)
   for _, t in ipairs(report.tags) do
@@ -738,6 +772,78 @@ suite("append: a tag ending on the last frame does not swallow the new ones", fu
   eq(existing.name, "existing", "the tag that was already there")
   eq(existing.fromFrame.frameNumber, 1, "still starts at frame 1")
   eq(existing.toFrame.frameNumber, 3, "still ends at frame 3")
+end)
+
+suite("replace: a matching tag is refreshed where it already sits", function()
+  local reports, errors, dest = replaceFrom(
+    { { "hero_idle_00" }, { "hero_idle_01" }, { "hero_idle_02" } },
+    { { "idle", 1, 3 }, { "run", 4, 6 }, { "jump", 7, 9 } })
+  eq(#errors, 0, "no errors")
+  eq(#dest.frames, 9, "no frames added")
+  eq(tagLayout(dest), "idle 1-3  run 4-6  jump 7-9", "the timeline is unchanged")
+  eq(reports[1].replaced, 1, "one tag replaced")
+  eq(#dest.tags, 3, "and no second idle tag was made")
+  eq(dest.layers[#dest.layers]:cel(1) ~= nil, true, "frame 1 was rewritten")
+  eq(dest.layers[#dest.layers]:cel(4), nil, "and run's frames were left alone")
+end)
+
+suite("replace: more frames than the tag held pushes the rest along", function()
+  local _, _, dest = replaceFrom(
+    { { "hero_idle_00" }, { "hero_idle_01" }, { "hero_idle_02" },
+      { "hero_idle_03" }, { "hero_idle_04" } },
+    { { "idle", 1, 3 }, { "run", 4, 6 }, { "jump", 7, 9 } })
+  eq(#dest.frames, 11, "two frames added")
+  eq(tagLayout(dest), "idle 1-5  run 6-8  jump 9-11", "idle grew, the others slid down")
+end)
+
+suite("replace: fewer frames shrinks the tag, and says what it cost", function()
+  local reports, _, dest = replaceFrom(
+    { { "hero_idle_00" } },
+    { { "idle", 1, 3 }, { "run", 4, 6 }, { "jump", 7, 9 } })
+  eq(#dest.frames, 7, "two frames removed")
+  eq(tagLayout(dest), "idle 1-1  run 2-4  jump 5-7", "idle shrank, the others slid up")
+  eq(warnedAbout(reports[1], "idle went from 3 frames to 1"), true, "said so")
+  eq(warnedAbout(reports[1], "any other layer's cels"), true,
+     "and warned what the deletion took with it")
+end)
+
+suite("replace: an animation with no matching tag is appended instead", function()
+  local reports, _, dest = replaceFrom(
+    { { "hero_attack_00" }, { "hero_attack_01" } },
+    { { "idle", 1, 3 }, { "run", 4, 6 }, { "jump", 7, 9 } })
+  eq(#dest.frames, 11, "appended at the end")
+  eq(tagLayout(dest), "idle 1-3  run 4-6  jump 7-9  attack 10-11",
+     "the tags that were there did not move")
+  eq(reports[1].replaced, 0, "nothing was replaced")
+end)
+
+suite("replace: a mix of both, in one pass", function()
+  local reports, _, dest = replaceFrom(
+    { { "hero_idle_00" }, { "hero_idle_01" }, { "hero_attack_00" } },
+    { { "idle", 1, 3 }, { "run", 4, 6 } },
+    { frameCount = 6 })   -- every frame tagged, so the append lands right after
+  -- idle shrinks 3 -> 2, so run slides up, and attack lands after it.
+  eq(tagLayout(dest), "idle 1-2  run 3-5  attack 6-6", "replaced in place, then appended")
+  eq(reports[1].replaced, 1, "one replaced")
+end)
+
+suite("replace: a layer of the same name is reused, not duplicated", function()
+  local _, _, dest = replaceFrom(
+    { { "hero_idle_00" } },
+    { { "idle", 1, 3 } },
+    { layerName = "hero" })
+  eq(#dest.layers, 1, "no second layer was added")
+  eq(dest.layers[1].name, "hero", "and it kept its name")
+  eq(dest.layers[1]:cel(1) ~= nil, true, "the frames were written onto it")
+end)
+
+suite("replace: the tag itself is left as the user had it", function()
+  local _, _, dest = replaceFrom(
+    { { "hero_idle_00" }, { "hero_idle_01" }, { "hero_idle_02" } },
+    { { "idle", 1, 3, "ping-pong" } },
+    nil, { aniDir = "reverse" })
+  eq(dest.tags[1].aniDir, "ping-pong", "direction untouched by the import setting")
+  eq(dest.tags[1].name, "idle", "and so is the name")
 end)
 
 suite("append: a clashing tag name is called out", function()
