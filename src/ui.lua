@@ -374,22 +374,48 @@ function M.run(entries, cfg, folder, opts)
   return true
 end
 
+--- Carry out a reordering and say how it went. Shared by both reorder dialogs.
+local function applyReorder(sprite, order)
+  local report, err = reorder.apply(sprite, order)
+  if not report then
+    app.alert { title = "Animation Auto-Tagger", text = { "Nothing was changed.", err } }
+    return false
+  end
+  app.refresh()
+  if #report.warnings > 0 then
+    local text = { ("Reordered %s."):format(plural(report.moved, "frame")) }
+    for _, w in ipairs(report.warnings) do text[#text + 1] = w end
+    app.alert { title = "Animation Auto-Tagger", text = text }
+  elseif report.moved == 0 then
+    if app.tip then app.tip("Already in that order") end
+  elseif app.tip then
+    app.tip(("Reordered %s"):format(plural(report.moved, "frame")))
+  end
+  return true
+end
+
+--- Why `sprite` cannot be reordered, said out loud. Returns false when it can.
+local function refuseReorder(sprite)
+  if not sprite then
+    app.alert { title = "Animation Auto-Tagger", text = "No sprite is open." }
+    return true
+  end
+  local blocked = reorder.conflict(sprite)
+  if blocked then
+    app.alert { title = "Animation Auto-Tagger",
+                text = { "These tags cannot be reordered.", blocked } }
+    return true
+  end
+  return false
+end
+
 --- Reorder the tag blocks on `sprite`.
 --
 -- One row per tag, with the arrows that move it. The sprite cannot change
 -- while a modal dialog is up, so the rows can be built to fit it exactly and
 -- the order lives in a plain list the arrows shuffle.
 function M.showReorder(sprite)
-  if not sprite then
-    app.alert { title = "Animation Auto-Tagger", text = "No sprite is open." }
-    return false
-  end
-  local blocked = reorder.conflict(sprite)
-  if blocked then
-    app.alert { title = "Animation Auto-Tagger",
-                text = { "These tags cannot be reordered.", blocked } }
-    return false
-  end
+  if refuseReorder(sprite) then return false end
 
   -- Indices into sprite.tags, in the order the dialog currently shows them.
   local order = {}
@@ -450,27 +476,121 @@ function M.showReorder(sprite)
   dlg:button {
     id = "apply", text = "Apply", focus = true,
     onclick = function()
-      local report, err = reorder.apply(sprite, order)
       dlg:close()
-      if not report then
-        app.alert { title = "Animation Auto-Tagger", text = { "Nothing was changed.", err } }
-        return
-      end
-      app.refresh()
-      if #report.warnings > 0 then
-        local text = { ("Reordered %s."):format(plural(report.moved, "frame")) }
-        for _, w in ipairs(report.warnings) do text[#text + 1] = w end
-        app.alert { title = "Animation Auto-Tagger", text = text }
-      elseif report.moved == 0 then
-        if app.tip then app.tip("Already in that order") end
-      elseif app.tip then
-        app.tip(("Reordered %s"):format(plural(report.moved, "frame")))
-      end
+      applyReorder(sprite, order)
     end,
   }
   dlg:button { id = "cancel", text = "Cancel" }
 
   refresh()
+  dlg:show()
+  return true
+end
+
+--- Reorder tags by dragging rows about. An experiment beside M.showReorder.
+--
+-- Aseprite has no list widget, so the rows are drawn onto a canvas and the
+-- dragging is done by hand. Everything visible comes from the theme: the
+-- filelist colours are the ones Aseprite uses for its own file browser, so the
+-- list looks the same in whatever theme is loaded rather than in colours
+-- guessed here.
+function M.showReorderDrag(sprite)
+  if refuseReorder(sprite) then return false end
+
+  local order = {}
+  for i in ipairs(sprite.tags) do order[i] = i end
+  local rows = #order
+
+  -- A canvas cannot be measured before it is painted and cannot be resized
+  -- afterwards, so the height is committed to up front and the row height is
+  -- whatever share of it each row gets. Rows therefore always fill the canvas
+  -- exactly, however the height turned out.
+  local ROW_GUESS = 24
+  local rowHeight = ROW_GUESS
+  local dragging = nil    -- the row being carried, by position
+
+  local dlg = Dialog { title = "Reorder Tags" }
+
+  local function rowLabels(position)
+    local tag = sprite.tags[order[position]]
+    local length = tag.toFrame.frameNumber - tag.fromFrame.frameNumber + 1
+    return ("%d.  %s"):format(position, tag.name), plural(length, "frame")
+  end
+
+  --- Which row a y coordinate falls in, kept inside the list either way.
+  local function rowAt(y)
+    local position = math.floor(y / math.max(1, rowHeight)) + 1
+    if position < 1 then return 1 end
+    if position > rows then return rows end
+    return position
+  end
+
+  dlg:canvas {
+    id = "list",
+    width = 300,
+    height = rows * ROW_GUESS,
+    onpaint = function(ev)
+      local gc = ev.context
+      rowHeight = math.max(1, gc.height // rows)
+
+      for i = 1, rows do
+        local top = (i - 1) * rowHeight
+        local face, ink
+        if i == dragging then
+          face, ink = "filelist_selected_row_face", "filelist_selected_row_text"
+        elseif i % 2 == 0 then
+          face, ink = "filelist_even_row_face", "filelist_even_row_text"
+        else
+          face, ink = "filelist_odd_row_face", "filelist_odd_row_text"
+        end
+
+        gc.color = app.theme.color[face]
+        gc:fillRect(Rectangle(0, top, gc.width, rowHeight))
+
+        gc.color = app.theme.color[ink]
+        local name, count = rowLabels(i)
+        local size = gc:measureText(name)
+        local baseline = top + math.max(0, (rowHeight - size.height) // 2)
+        gc:fillText(name, 6, baseline)
+        local right = gc:measureText(count)
+        gc:fillText(count, math.max(0, gc.width - right.width - 6), baseline)
+      end
+    end,
+    onmousedown = function(ev)
+      dragging = rowAt(ev.y)
+      dlg:repaint()
+    end,
+    onmousemove = function(ev)
+      if not dragging then return end
+      local target = rowAt(ev.y)
+      if target ~= dragging then
+        -- Reordered as the pointer passes, rather than dropped at the end: the
+        -- list under the cursor is always what applying would produce.
+        order = reorder.moveTo(order, dragging, target)
+        dragging = target
+        dlg:repaint()
+      end
+    end,
+    onmouseup = function()
+      dragging = nil
+      dlg:repaint()
+    end,
+  }
+
+  dlg:newrow()
+  dlg:label { label = "", text = "drag a row to move it" }
+  dlg:newrow()
+  dlg:label { label = "", text = "frames belonging to no tag are moved to the end" }
+
+  dlg:button {
+    id = "apply", text = "Apply", focus = true,
+    onclick = function()
+      dlg:close()
+      applyReorder(sprite, order)
+    end,
+  }
+  dlg:button { id = "cancel", text = "Cancel" }
+
   dlg:show()
   return true
 end
