@@ -554,10 +554,10 @@ function M.showReorderDrag(sprite)
       local border = app.theme.color.popup_window_border
       local divider = app.theme.color.palette_entries_separator
 
-      for i = 1, rows do
-        local top = (i - 1) * rowHeight
+      --- One row, at `top`. `lifted` is the one being carried.
+      local function paintRow(i, top, lifted)
         local face, ink
-        if i == dragging then
+        if lifted then
           face, ink = "filelist_selected_row_face", "filelist_selected_row_text"
         elseif i % 2 == 0 then
           face, ink = "filelist_even_row_face", "filelist_even_row_text"
@@ -585,25 +585,48 @@ function M.showReorderDrag(sprite)
         local right = gc:measureText(count)
         gc:fillText(count, math.max(0, gc.width - right.width - 6), baseline)
 
-        -- A line under every row but the last, so they read as rows rather
-        -- than as stripes that happen to alternate.
-        if i < rows then
+        -- The divider through the gutter, drawn per row so the lifted one
+        -- carries its own rather than showing the list's through it.
+        gc.color = divider
+        gc:fillRect(Rectangle(GRIP + GUTTER, top, 1, rowHeight))
+
+        if lifted then
+          gc.color = border
+          gc:strokeRect(Rectangle(0, top, gc.width, rowHeight))
+        elseif i < rows then
+          -- A line under every row but the last, so they read as rows rather
+          -- than as stripes that happen to alternate.
           gc.color = divider
           gc:fillRect(Rectangle(0, top + rowHeight - 1, gc.width, 1))
         end
       end
 
-      -- The divider between the numbers and the names, full height, and the
-      -- inset edge around the lot: the shape Aseprite gives its own lists.
-      gc.color = divider
-      gc:fillRect(Rectangle(GRIP + GUTTER, 0, 1, gc.height))
+      --- Darkness falling down and to the right of a row, so it reads as off
+      --- the surface rather than merely coloured differently. Black rather than
+      --- a theme colour: a shadow is an absence of light in any theme.
+      local function paintShadow(top)
+        gc.color = Color { r = 0, g = 0, b = 0 }
+        for _, layer in ipairs({ { 3, 22 }, { 2, 30 }, { 1, 44 } }) do
+          gc.opacity = layer[2]
+          gc:fillRect(Rectangle(layer[1], top + layer[1], gc.width, rowHeight))
+        end
+        gc.opacity = 255
+      end
+
+      -- Every row that is staying put, first.
+      for i = 1, rows do
+        if i ~= dragging then paintRow(i, (i - 1) * rowHeight, false) end
+      end
+
       gc.color = border
       gc:strokeRect(Rectangle(0, 0, gc.width, gc.height))
 
-      -- The row being carried gets an edge of its own, so it reads as lifted
-      -- off the others rather than merely coloured differently.
+      -- Then the carried one, over the top of its neighbours, so its shadow
+      -- has something to fall on.
       if dragging then
-        gc:strokeRect(Rectangle(0, (dragging - 1) * rowHeight, gc.width, rowHeight))
+        local top = (dragging - 1) * rowHeight
+        paintShadow(top)
+        paintRow(dragging, top, true)
       end
     end,
     mousecursor = MouseCursor.GRAB,
@@ -635,6 +658,21 @@ function M.showReorderDrag(sprite)
 
   dlg:newrow()
   dlg:label { label = "", text = "drag a row by its handle to move it" }
+
+  -- Kept alongside the dragging: sorting a dozen tags by name is one click
+  -- that no amount of dragging matches.
+  dlg:newrow()
+  dlg:combobox {
+    id = "sortBy", label = "Sort by",
+    option = TAG_SORTS[1][1], options = labelsOf(TAG_SORTS),
+  }
+  dlg:button {
+    id = "sort", text = "Sort",
+    onclick = function()
+      order = reorder.sortOrder(sprite, order, valueFor(TAG_SORTS, dlg.data.sortBy))
+      dlg:repaint()
+    end,
+  }
   dlg:newrow()
   dlg:label { label = "", text = "frames belonging to no tag are moved to the end" }
 
