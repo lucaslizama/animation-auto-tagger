@@ -1,4 +1,4 @@
-# Animation Auto-Tagger 1.1
+# Animation Auto-Tagger 1.1.2
 
 Release notes and a full account of what the extension does.
 
