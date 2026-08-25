@@ -1,4 +1,4 @@
-# Animation Auto-Tagger 1.1.2
+# Animation Auto-Tagger 1.2
 
 Release notes and a full account of what the extension does.
 
@@ -78,9 +78,10 @@ Tags come out alphabetically by default, or in the order the files were read.
 Rearranging them afterwards is a separate command rather than part of building,
 since the two are separate decisions: what to bring in, and what order it should
 end up in. It works on any sprite with more than one tag and is also on the
-right-click menu of a tag in the timeline. Each row can be moved a place at a
-time or sent straight to the top or bottom, and a Sort button takes the whole
-list at once: by name either way, longest or shortest animation first, or back to
+right-click menu of a tag in the timeline. Rows are dragged by a handle on the
+left, reordering as the pointer passes so that what is under the cursor is
+always what applying would produce, and a Sort button takes the whole list at
+once: by name either way, longest or shortest animation first, or back to
 the order the timeline has now. On applying, it rearranges the timeline so the
 frames really move: every layer, every cel
 position, every frame duration travels with its own tag, and the tags keep their

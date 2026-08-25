@@ -312,11 +312,17 @@ separate decisions: what to bring in, and what order it should end up in.
 
 **File ▸ Scripts ▸ Reorder Tags** does the rearranging, on any sprite that has
 more than one tag, and it is also on the right-click menu of a tag in the
-timeline. Each row has **Top**, **Up**, **Dn** and **Btm**, and a **Sort**
-button takes the whole list in one go: by name either way, longest or shortest
-animation first, or back to the order the timeline has now. Sorting is stable,
-so tags of equal length keep the order they were already in and pressing Sort
-twice changes nothing.
+timeline. Drag a row by the handle on its left to move it; the list reorders as
+the pointer passes, so what is under the cursor is always what applying would
+produce. A **Sort** button takes the whole list in one go: by name either way,
+longest or shortest animation first, or back to the order the timeline has now.
+Sorting is stable, so tags of equal length keep the order they were already in
+and pressing Sort twice changes nothing.
+
+Aseprite has no list widget, so those rows are painted onto a canvas and the
+dragging is done by hand. The colours are the theme's own, the ones Aseprite
+uses for its file browser, so a different theme restyles the list rather than
+breaking it.
 
 On Apply it rearranges the timeline so the frames actually move to match: every layer, every cel position, every frame
 duration travels with its own tag, and the tags keep their names, directions and

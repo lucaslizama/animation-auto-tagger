@@ -409,92 +409,17 @@ local function refuseReorder(sprite)
   return false
 end
 
---- Reorder the tag blocks on `sprite`.
---
--- One row per tag, with the arrows that move it. The sprite cannot change
--- while a modal dialog is up, so the rows can be built to fit it exactly and
--- the order lives in a plain list the arrows shuffle.
-function M.showReorder(sprite)
-  if refuseReorder(sprite) then return false end
-
-  -- Indices into sprite.tags, in the order the dialog currently shows them.
-  local order = {}
-  for i in ipairs(sprite.tags) do order[i] = i end
-  local rows = #order
-
-  local dlg = Dialog { title = "Reorder Tags" }
-
-  local function rowText(position)
-    local tag = sprite.tags[order[position]]
-    local from = tag.fromFrame.frameNumber
-    local to = tag.toFrame.frameNumber
-    return ("%d.  %s  -  %s")
-      :format(position, tag.name, plural(to - from + 1, "frame"))
-  end
-
-  local function refresh()
-    for i = 1, rows do
-      dlg:modify { id = "row" .. i, text = rowText(i) }
-      dlg:modify { id = "top" .. i, enabled = i > 1 }
-      dlg:modify { id = "up" .. i, enabled = i > 1 }
-      dlg:modify { id = "down" .. i, enabled = i < rows }
-      dlg:modify { id = "bot" .. i, enabled = i < rows }
-    end
-  end
-
-  local function moveTo(from, to)
-    order = reorder.moveTo(order, from, to)
-    refresh()
-  end
-
-  local function sortBy(how)
-    order = reorder.sortOrder(sprite, order, how)
-    refresh()
-  end
-
-  for i = 1, rows do
-    dlg:label { id = "row" .. i, label = "", text = "" }
-    dlg:button { id = "top" .. i, text = "Top", onclick = function() moveTo(i, 1) end }
-    dlg:button { id = "up" .. i, text = "Up", onclick = function() moveTo(i, i - 1) end }
-    dlg:button { id = "down" .. i, text = "Dn", onclick = function() moveTo(i, i + 1) end }
-    dlg:button { id = "bot" .. i, text = "Btm", onclick = function() moveTo(i, rows) end }
-    dlg:newrow()
-  end
-
-  dlg:separator {}
-  dlg:combobox {
-    id = "sortBy", label = "Sort by",
-    option = TAG_SORTS[1][1], options = labelsOf(TAG_SORTS),
-  }
-  dlg:button {
-    id = "sort", text = "Sort",
-    onclick = function() sortBy(valueFor(TAG_SORTS, dlg.data.sortBy)) end,
-  }
-  dlg:newrow()
-  dlg:label { label = "", text = "frames belonging to no tag are moved to the end" }
-
-  dlg:button {
-    id = "apply", text = "Apply", focus = true,
-    onclick = function()
-      dlg:close()
-      applyReorder(sprite, order)
-    end,
-  }
-  dlg:button { id = "cancel", text = "Cancel" }
-
-  refresh()
-  dlg:show()
-  return true
-end
-
---- Reorder tags by dragging rows about. An experiment beside M.showReorder.
+--- Reorder the tag blocks on `sprite` by dragging the rows about.
 --
 -- Aseprite has no list widget, so the rows are drawn onto a canvas and the
 -- dragging is done by hand. Everything visible comes from the theme: the
 -- filelist colours are the ones Aseprite uses for its own file browser, so the
 -- list looks the same in whatever theme is loaded rather than in colours
 -- guessed here.
-function M.showReorderDrag(sprite)
+--
+-- Sort is here as well as the dragging. Dragging is better for nudging one
+-- animation into place; sorting a dozen by name is one click.
+function M.showReorder(sprite)
   if refuseReorder(sprite) then return false end
 
   local order = {}

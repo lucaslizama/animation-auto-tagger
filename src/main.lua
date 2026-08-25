@@ -24,8 +24,8 @@ local state = {
 -- in the plugin rather than as what it is. Everything this file reaches for is
 -- checked once, up front, so the report says what to do about it instead.
 local NEEDED = {
-  ui = { "run", "show", "showReorder", "showReorderDrag", "summaryLine",
-         "groupLines", "noteLines", "frameTotal" },
+  ui = { "run", "show", "showReorder", "summaryLine", "groupLines", "noteLines",
+         "frameTotal" },
   collect = { "commonFolder", "completeFromFolder", "fromFolder", "fromSprites" },
   naming = { "group" },
   config = { "load", "save", "namingOpts" },
@@ -323,11 +323,6 @@ function init(plugin)
     ui.showReorder(app.sprite)
   end
 
-  local function reorderTagsByDragging()
-    if state.broken then return reportBroken() end
-    ui.showReorderDrag(app.sprite)
-  end
-
   local function haveTags() return app.sprite ~= nil and #app.sprite.tags > 1 end
 
   plugin:newCommand {
@@ -350,16 +345,6 @@ function init(plugin)
     group = "anim_auto_tagger",
     onenabled = haveTags,
     onclick = reorderTags,
-  }
-
-  -- An experiment sitting beside the buttons version rather than replacing it,
-  -- so the two can be compared and the loser deleted.
-  plugin:newCommand {
-    id = "AnimAutoTagReorderDrag",
-    title = "Reorder Tags by Dragging...",
-    group = "anim_auto_tagger",
-    onenabled = haveTags,
-    onclick = reorderTagsByDragging,
   }
 
   -- Beside Import in the File menu, two clicks instead of four.

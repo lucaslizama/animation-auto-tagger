@@ -75,8 +75,9 @@ and leave the rest alone.
 ### Put them in the order that makes sense
 
 A build lays the tags down alphabetically or in the order the files were read.
-Rearranging them is a separate command, on any sprite with more than one tag. It lists the tags with Up and Down
-buttons and, on applying, rearranges the timeline so the frames actually move: every layer, every cel position, every frame duration travels with its own
+Rearranging them is a separate command, on any sprite with more than one tag. The tags are listed as rows to be
+dragged into the order you want, with a Sort button for taking the whole list at
+once, and on applying it rearranges the timeline so the frames actually move: every layer, every cel position, every frame duration travels with its own
 tag, and the tags keep their names, directions and colours. Aseprite offers no
 way to do this short of dragging frame ranges around by hand. Tags that share
 frames are refused rather than guessed at, and it is one undo step like
