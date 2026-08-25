@@ -280,20 +280,29 @@ function M.show(opts)
   end
 
   dlg:newrow()
+  -- A folder field built out of a file widget, because Aseprite has no folder
+  -- picker: Dialog:file takes open/save only, and Dialog:folder() is still an
+  -- open request (aseprite/aseprite#5399). `entry` is what makes it usable --
+  -- a directory can be typed or pasted straight in, and the browse button is
+  -- there for the times reaching for a file inside is easier.
   dlg:file {
     id = "pick",
     label = "Folder",
-    title = "Pick any frame in the folder to scan",
+    title = "Open any file inside the folder to scan",
     open = true,
+    entry = true,
     filename = state.folder,
     onchange = function()
       local chosen = dlg.data.pick
-      if chosen and chosen ~= "" then
-        local folder = app.fs.isDirectory(chosen) and chosen or app.fs.filePath(chosen)
-        state.folder = folder
-        state.raw = collect.fromFolder(folder)
-        regroup()
-      end
+      if not chosen or chosen == "" then return end
+      -- Two ways in, one target: browsing hands back a file, so fall back to
+      -- its folder. The entry fires per keystroke, so a path still being typed
+      -- has to be discarded rather than scanned as a half-written name.
+      local folder = app.fs.isDirectory(chosen) and chosen or app.fs.filePath(chosen)
+      if not app.fs.isDirectory(folder) then return end
+      state.folder = folder
+      state.raw = collect.fromFolder(folder)
+      regroup()
     end,
   }
 
@@ -306,7 +315,7 @@ function M.show(opts)
   dlg:newrow()
   dlg:label {
     label = "",
-    text = "Aseprite's drag-and-drop drops files past ~10; this reads them back",
+    text = '"folder" adds every frame it finds; "gaps" only fills animations already here',
   }
 
   dlg:newrow()
