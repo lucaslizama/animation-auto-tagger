@@ -83,9 +83,34 @@ local function newSprite(w, h, mode, opts)
 end
 
 function Sprite:newEmptyFrame(n)
+  -- Ranges are read before the insert and re-pointed after, because Aseprite
+  -- moves tags along with the frames: one that starts later shifts down, and
+  -- one whose last frame the insert lands on (or inside) grows to include it.
+  local ranges = {}
+  for i, tag in ipairs(self.tags) do
+    ranges[i] = { tag.fromFrame.frameNumber, tag.toFrame.frameNumber }
+  end
+
   table.insert(self.frames, n, { frameNumber = n, duration = 0.1, sprite = self })
   for i, f in ipairs(self.frames) do f.frameNumber = i end
+
+  for i, tag in ipairs(self.tags) do
+    local from, to = ranges[i][1], ranges[i][2]
+    if n <= from then
+      from, to = from + 1, to + 1
+    elseif n <= to + 1 then
+      to = to + 1
+    end
+    tag.fromFrame, tag.toFrame = self.frames[from], self.frames[to]
+  end
   return self.frames[n]
+end
+
+function Sprite:newLayer()
+  local layer = setmetatable(
+    { name = "Layer " .. (#self.layers + 1), sprite = self, celsByFrame = {} }, Layer)
+  self.layers[#self.layers + 1] = layer
+  return layer
 end
 
 function Sprite:newCel(layer, frame, image, position)
@@ -97,8 +122,18 @@ end
 
 function Sprite:deleteCel(cel) cel.layer.celsByFrame[cel.frameNumber] = nil end
 
+-- fromFrame/toFrame are Frame objects in Aseprite, not numbers, and assigning
+-- either a Frame or a plain number to them is allowed.
 function Sprite:newTag(from, to)
-  local tag = { sprite = self, fromFrame = from, toFrame = to, name = "", aniDir = AniDir.FORWARD }
+  local tag = setmetatable({ sprite = self, name = "", aniDir = AniDir.FORWARD }, {
+    __newindex = function(t, k, v)
+      if (k == "fromFrame" or k == "toFrame") and type(v) == "number" then
+        v = t.sprite.frames[v]
+      end
+      rawset(t, k, v)
+    end,
+  })
+  tag.fromFrame, tag.toFrame = self.frames[from], self.frames[to]
   self.tags[#self.tags + 1] = tag
   return tag
 end

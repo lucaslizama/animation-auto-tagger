@@ -117,6 +117,27 @@ function M.summaryLine(grouped, cfg)
   return s
 end
 
+--- The open sprites, as { label, sprite } pairs for the target chooser.
+--
+-- The index is part of the label because two tabs can carry the same name --
+-- and an unsaved sprite carries none at all -- while a combobox can only hand
+-- back the string the user picked.
+local function openSpriteChoices()
+  local choices = {}
+  for i, sp in ipairs(app.sprites) do
+    local name = (sp.filename ~= "" and app.fs.fileTitle(sp.filename)) or "untitled"
+    choices[#choices + 1] = { label = ("%d. %s"):format(i, name), sprite = sp }
+  end
+  return choices
+end
+
+--- The sprite behind a chooser label, or nil.
+local function spriteForLabel(choices, label)
+  for _, c in ipairs(choices) do
+    if c.label == label then return c.sprite end
+  end
+end
+
 --- Read the dialog widgets back into a config table.
 local function readConfig(dlg, base)
   local cfg = {}
@@ -134,6 +155,8 @@ local function readConfig(dlg, base)
 
   cfg.frameDurationMs   = math.max(1, math.floor(tonumber(d.frameDurationMs) or 100))
   cfg.keepSourceDurations = d.keepSourceDurations
+  cfg.buildTarget       = d.buildTarget
+  cfg.targetLabel       = d.targetSprite   -- runtime only, never persisted
   cfg.canvasMode        = valueFor(CANVAS_MODES, d.canvasMode)
   cfg.align             = d.align
   cfg.colorMode         = d.colorMode
@@ -149,8 +172,10 @@ local function readConfig(dlg, base)
 end
 
 --- Do the build and report what happened.
--- Returns true when at least one sprite was produced.
-function M.run(entries, cfg, folder)
+-- Returns true when at least one sprite was produced. `target` is the sprite
+-- to append to; without one, an appending build falls back to the active
+-- sprite, which is all the watcher's auto-build path can know about.
+function M.run(entries, cfg, folder, target)
   local grouped = naming.group(entries, config.namingOpts(cfg))
   if #grouped.groups == 0 then
     app.alert {
@@ -162,8 +187,25 @@ function M.run(entries, cfg, folder)
     return false
   end
 
+  -- One place decides what is being appended to, and one alert covers there
+  -- being nothing to append to.
+  if cfg.buildTarget == "new sprite" then
+    target = nil
+  else
+    target = target or app.sprite
+    if not target then
+      app.alert {
+        title = "Animation Auto-Tagger",
+        text = { "There is no sprite to append to.",
+                 'Open one first, or set Build into back to "new sprite".' },
+      }
+      return false
+    end
+  end
+
   local pool = sources.newPool()
-  local reports, errors, notes = builder.buildAll(grouped, cfg, { pool = pool, folder = folder })
+  local reports, errors, notes = builder.buildAll(grouped, cfg,
+    { pool = pool, folder = folder, target = target })
   sources.release(pool, cfg)
 
   if #reports == 0 then
@@ -187,10 +229,15 @@ function M.run(entries, cfg, folder)
 
   local headline = {}
   for _, r in ipairs(reports) do
-    headline[#headline + 1] = ("%s: %s in %s")
-      :format(app.fs.fileTitle(r.sprite.filename) ~= "" and app.fs.fileTitle(r.sprite.filename)
-                or "sprite",
-              plural(#r.tags, "tag"), plural(r.frames, "frame"))
+    local name = app.fs.fileTitle(r.sprite.filename)
+    if name == "" then name = "sprite" end
+    if r.appended then
+      headline[#headline + 1] = ("%s: %s in %s appended from frame %d")
+        :format(name, plural(r.frames, "frame"), plural(#r.tags, "tag"), r.firstFrame)
+    else
+      headline[#headline + 1] = ("%s: %s in %s")
+        :format(name, plural(#r.tags, "tag"), plural(r.frames, "frame"))
+    end
   end
 
   if #notes > 0 then
@@ -232,6 +279,22 @@ function M.show(opts)
     recovered = 0,
     folder    = opts.folder or collect.commonFolder(opts.entries or {}),
   }
+
+  -- Taken once, at open time: the dialog is modal, so the set of open sprites
+  -- cannot change while it is up.
+  local targetChoices = openSpriteChoices()
+  local targetLabels = {}
+  for _, c in ipairs(targetChoices) do targetLabels[#targetLabels + 1] = c.label end
+  local activeLabel = targetLabels[1]
+  for _, c in ipairs(targetChoices) do
+    if app.sprite and c.sprite == app.sprite then activeLabel = c.label end
+  end
+  -- A combobox with no options at all renders as an empty box with nothing to
+  -- explain it, so say what the emptiness means.
+  if #targetChoices == 0 then
+    targetLabels = { "(nothing open)" }
+    activeLabel = targetLabels[1]
+  end
 
   local dlg = Dialog { title = opts.title or "Build Tagged Animation" }
 
@@ -374,6 +437,29 @@ function M.show(opts)
 
   dlg:separator { text = "Result" }
 
+  -- A stale preference naming an option that no longer exists would leave the
+  -- combobox showing nothing at all.
+  local startTarget = cfg.buildTarget
+  if startTarget ~= "new sprite" and startTarget ~= "an open sprite" then
+    startTarget = config.defaults.buildTarget
+  end
+  if #targetChoices == 0 then startTarget = "new sprite" end
+
+  dlg:combobox {
+    id = "buildTarget", label = "Build into",
+    option = startTarget, options = config.BUILD_TARGETS,
+  }
+  dlg:combobox {
+    id = "targetSprite", label = "",
+    option = activeLabel, options = targetLabels,
+    enabled = #targetChoices > 0,
+  }
+  dlg:newrow()
+  dlg:label {
+    label = "",
+    text = "appending adds a layer and keeps that sprite's own canvas and color mode",
+  }
+
   dlg:number {
     id = "frameDurationMs", label = "Frame duration (ms)",
     text = tostring(cfg.frameDurationMs), decimals = 0,
@@ -441,7 +527,8 @@ function M.show(opts)
       current.lastFolder = state.folder or ""
       if opts.onApply then opts.onApply(current) end
       dlg:close()
-      M.run(state.entries, current, state.folder)
+      M.run(state.entries, current, state.folder,
+            spriteForLabel(targetChoices, current.targetLabel))
     end,
   }
   dlg:button { id = "cancel", text = "Cancel" }

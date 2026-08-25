@@ -189,5 +189,81 @@ local sf, st = tagRange(reports4[1].sprite.tags[5])
 eq(reports4[1].sprite.tags[5].name .. " " .. sf .. "-" .. st, "run 15-20", "ranges intact")
 sources.release(pool4, cfg)
 
+--------------------------------------------------------------------------
+-- Appending into a sprite that already exists. The fake API answers "does the
+-- builder do the arithmetic right"; only Aseprite answers "is newLayer real,
+-- and does a tag created at frame 24 survive a save".
+--------------------------------------------------------------------------
+
+for i = #app.sprites, 1, -1 do app.sprites[i]:close() end
+
+local existing = Sprite(40, 32, ColorMode.RGB)
+existing.layers[1].name = "background"
+for i = 2, 3 do existing:newEmptyFrame(i) end
+existing:newTag(1, 3).name = "existing"
+eq(#existing.frames, 3, "target starts with 3 frames")
+
+local pool5 = sources.newPool()
+local reports5, errors5 = builder.buildAll(
+  naming.group(collect.fromFolder(samples), config.namingOpts(cfg)), cfg,
+  { pool = pool5, folder = samples, target = existing })
+for _, e in ipairs(errors5) do print("  error: " .. e) end
+eq(#errors5, 0, "no errors")
+eq(#reports5, 1, "one report")
+eq(reports5[1].sprite, existing, "wrote into the sprite it was handed")
+eq(reports5[1].appended, true, "reported as an append")
+eq(reports5[1].firstFrame, 4, "started after the frames already there")
+
+eq(#existing.frames, 23, "3 existing + 20 appended")
+eq(#existing.layers, 2, "the frames went onto a layer of their own")
+eq(existing.layers[1].name, "background", "the original layer is untouched")
+eq(#existing.tags, 6, "the tag that was there, plus five")
+
+local af, at = tagRange(existing.tags[#existing.tags])
+eq(existing.tags[#existing.tags].name .. " " .. af .. "-" .. at, "run 18-23",
+   "the last appended tag sits at the end")
+local ef, et = tagRange(existing.tags[1])
+eq(ef .. "-" .. et, "1-3", "the tag that was already there did not move")
+
+-- The appended cels must hold pixels, and must not have landed on frame 1.
+local appendedLayer = existing.layers[2]
+local emptyAppended = 0
+for f = 4, #existing.frames do
+  local cel = appendedLayer:cel(f)
+  if not cel or cel.image:isEmpty() then emptyAppended = emptyAppended + 1 end
+end
+eq(emptyAppended, 0, "every appended frame carries pixels")
+eq(appendedLayer:cel(1), nil, "nothing was written over the existing frames")
+
+sources.release(pool5, cfg)
+
+local appendOut = app.fs.joinPath(app.fs.tempPath, "aat_e2e_append.aseprite")
+existing:saveAs(appendOut)
+existing:close()
+
+local reopenedAppend = Sprite { fromFile = appendOut }
+eq(#reopenedAppend.frames, 23, "reopened: 23 frames")
+eq(#reopenedAppend.tags, 6, "reopened: 6 tags")
+eq(#reopenedAppend.layers, 2, "reopened: both layers")
+local rrf, rrt = tagRange(reopenedAppend.tags[6])
+eq(rrf .. "-" .. rrt, "18-23", "reopened: appended tag range survived the round trip")
+reopenedAppend:close()
+
+--------------------------------------------------------------------------
+-- Appending a sprite into itself has to be refused, not attempted.
+--------------------------------------------------------------------------
+
+local selfTarget = Sprite { fromFile = app.fs.joinPath(samples, "hero_idle_00.png") }
+local selfEntries = collect.fromSprites({ selfTarget })
+local pool6 = sources.newPool()
+local reports6, errors6 = builder.buildAll(
+  naming.group(selfEntries, config.namingOpts(cfg)), cfg,
+  { pool = pool6, target = selfTarget })
+eq(#reports6, 0, "nothing built")
+eq(#errors6, 1, "one error")
+eq(#selfTarget.frames, 4, "the sprite was left exactly as it was")
+sources.release(pool6, cfg)
+selfTarget:close()
+
 print(("\n%d checks, %d failure(s)"):format(checks, failures))
 if failures > 0 then os.exit(1) end

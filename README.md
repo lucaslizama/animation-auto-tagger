@@ -198,6 +198,7 @@ pattern needs either two captures `(animation)(index)` or three
 
 | Option | What it does |
 | --- | --- |
+| Build into | A new sprite, or one already open — see below |
 | Frame duration | Milliseconds per frame (default 100) |
 | Keep source durations | For multi-frame sources, copy their timing instead |
 | Canvas size | Largest source frame, or the first one |
@@ -215,6 +216,25 @@ A note on colour: sources are composited in RGB and converted at the end, except
 when every source is indexed against one identical palette — then it composites
 directly in indexed so the palette indices survive untouched. Mixed palettes get
 requantized, which is unavoidable.
+
+### Appending to a sprite you already have
+
+**Build into ▸ an open sprite** adds the frames to the end of that sprite's
+timeline instead of making a new one, on a layer of its own, in one undo step.
+The second dropdown picks which open sprite; it is numbered because two tabs can
+share a name and an unsaved one has none.
+
+The sprite being appended to keeps everything about itself — its canvas size,
+its colour mode, its filename. Frames wider or taller than its canvas are
+cropped, and **Canvas size**, **Color mode** and **Name the sprite after the
+base** stop applying. **One sprite per base name** cannot apply either: it asks
+for several sprites and there is only one.
+
+Two things are worth knowing. A sprite cannot be appended to itself — if the
+target is also one of the frames going in, the build is refused rather than
+reading half-written frames back into itself. And appending into an **indexed**
+sprite can shift colours: each source is quantized against a palette of its own,
+not against the target's, so the indices mean something else once they land.
 
 ## Getting it into Godot
 

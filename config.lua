@@ -12,6 +12,7 @@ M.CANVAS_MODES = { "max", "first" }
 M.COLOR_MODES  = { "rgb", "gray", "indexed", "same as first source" }
 M.ANI_DIRS     = { "forward", "reverse", "ping-pong", "ping-pong-reverse" }
 M.COMPLETE_DROPS = { "folder", "gaps", "off" }
+M.BUILD_TARGETS  = { "new sprite", "an open sprite" }
 
 M.defaults = {
   ---------------------------------------------------------------- naming
@@ -26,6 +27,7 @@ M.defaults = {
   ----------------------------------------------------------------- build
   frameDurationMs   = 100,
   keepSourceDurations = false,
+  buildTarget       = "new sprite",   -- or "an open sprite", to append instead
   canvasMode        = "max",
   align             = "center",
   colorMode         = "rgb",

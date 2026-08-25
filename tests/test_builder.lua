@@ -48,6 +48,36 @@ local function buildFrom(specs, overrides)
   return reports, errors, grouped, pool, cfg
 end
 
+--- Build into an existing sprite. `target` describes the sprite appended to.
+local function appendFrom(specs, overrides, target)
+  target = target or {}
+  local entries = withFiles(specs)   -- resets the fake, so the target comes after
+  local dest = fake.newSprite(target.width or 16, target.height or 16,
+    target.colorMode or fake.ColorMode.RGB,
+    { filename = target.filename or "/art/scene.aseprite",
+      frameCount = target.frameCount or 3 })
+  -- Deliberately spanning to the last frame: that is the range Aseprite grows
+  -- when frames are appended after it.
+  for _, name in ipairs(target.tags or {}) do
+    dest:newTag(1, #dest.frames).name = name
+  end
+  local cfg = config.new()
+  cfg.buildTarget = "active sprite"
+  for k, v in pairs(overrides or {}) do cfg[k] = v end
+  local grouped = naming.group(entries, config.namingOpts(cfg))
+  local pool = sources.newPool()
+  local reports, errors = builder.buildAll(grouped, cfg,
+    { pool = pool, folder = "/art", target = dest })
+  return reports, errors, dest
+end
+
+--- The tag with `name` in a report, or nil.
+local function tagNamed(report, name)
+  for _, t in ipairs(report.tags) do
+    if t.name == name then return t end
+  end
+end
+
 ------------------------------------------------------------------- suites
 
 suite("build: frames laid out in tag order", function()
@@ -67,7 +97,8 @@ suite("build: frames laid out in tag order", function()
   eq(r.tags[2].name, "run", "second tag")
   eq(r.tags[2].from .. "-" .. r.tags[2].to, "3-5", "run range")
   eq(r.sprite.tags[2].name, "run", "tag applied to the sprite")
-  eq(r.sprite.tags[2].fromFrame .. "-" .. r.sprite.tags[2].toFrame, "3-5", "sprite tag range")
+  eq(r.sprite.tags[2].fromFrame.frameNumber .. "-" .. r.sprite.tags[2].toFrame.frameNumber,
+     "3-5", "sprite tag range")
 end)
 
 suite("build: every frame gets exactly one cel drawn from its source", function()
@@ -489,6 +520,114 @@ suite("build: everything wrapped in a single transaction per sprite", function()
   buildFrom { { "hero_run_00" }, { "hero_idle_00" } }
   eq(#fake.app.transactions, 1, "one transaction")
   eq(fake.app.transactions[1], "Build tagged animation", "named for the undo history")
+end)
+
+suite("append: frames land after the ones already there", function()
+  local reports, errors, dest = appendFrom {
+    { "hero_run_00" }, { "hero_run_01" }, { "hero_run_02" },
+    { "hero_idle_00" }, { "hero_idle_01" },
+  }
+  eq(#errors, 0, "no errors")
+  eq(#reports, 1, "one report")
+  local r = reports[1]
+  eq(r.sprite, dest, "wrote into the sprite it was given")
+  eq(r.appended, true, "reported as an append")
+  eq(r.frames, 5, "counts only what it added")
+  eq(r.firstFrame, 4, "starts after the 3 that were there")
+  eq(#dest.frames, 8, "3 existing + 5 appended")
+
+  -- Tag order is alphabetical by default, so idle takes the first slot.
+  local idle = tagNamed(r, "idle")
+  eq(idle and idle.from, 4, "idle starts at frame 4")
+  eq(idle and idle.to, 5, "idle ends at frame 5")
+  local run = tagNamed(r, "run")
+  eq(run and run.from, 6, "run starts at frame 6")
+  eq(run and run.to, 8, "run ends at frame 8")
+end)
+
+suite("append: the existing art keeps its own layer", function()
+  local reports, _, dest = appendFrom { { "hero_run_00" }, { "hero_run_01" } }
+  eq(#dest.layers, 2, "one layer added, not reused")
+  eq(next(dest.layers[1].celsByFrame), nil, "the original layer is untouched")
+  local added = dest.layers[2]
+  eq(added:cel(4) ~= nil, true, "first appended cel at frame 4")
+  eq(added:cel(5) ~= nil, true, "second appended cel at frame 5")
+  eq(added:cel(1), nil, "nothing written over the existing frames")
+  eq(reports[1].sprite.layers[2].name, "hero", "layer named after the base")
+end)
+
+suite("append: the target's canvas wins, oversized frames are cropped", function()
+  local reports = appendFrom({ { "hero_run_00", 32, 32 } }, nil, { width = 16, height = 16 })
+  local r = reports[1]
+  eq(r.canvas.width, 16, "canvas width from the target")
+  eq(r.canvas.height, 16, "canvas height from the target")
+  eq(#r.warnings >= 1, true, "warned about the crop")
+  eq(r.warnings[1]:find("larger than the 16x16 canvas", 1, true) ~= nil, true,
+     "the warning says which canvas")
+end)
+
+suite("append: the target's color mode is kept, never converted", function()
+  local reports, _, dest = appendFrom({ { "hero_run_00" } }, { colorMode = "rgb" },
+    { colorMode = fake.ColorMode.GRAY })
+  eq(dest.colorMode, fake.ColorMode.GRAY, "the target is still gray")
+  eq(reports[1].colorMode, "gray", "reported as gray, not the configured rgb")
+end)
+
+suite("append: the target is not renamed after the base", function()
+  local _, _, dest = appendFrom({ { "hero_run_00" } }, { nameSpriteAfterBase = true })
+  eq(dest.filename, "/art/scene.aseprite", "filename left alone")
+end)
+
+suite("append: a sprite cannot be appended to itself", function()
+  fake.reset()
+  local dest = fake.newSprite(16, 16, fake.ColorMode.RGB,
+    { filename = "/art/hero_run_00.png" })
+  local cfg = config.new()
+  cfg.buildTarget = "active sprite"
+  local grouped = naming.group({ { title = "hero_run_00", sprite = dest } },
+    config.namingOpts(cfg))
+  local reports, errors = builder.buildAll(grouped, cfg,
+    { pool = sources.newPool(), target = dest })
+  eq(#reports, 0, "nothing built")
+  eq(#errors, 1, "one error")
+  eq(errors[1]:find("one of the frames", 1, true) ~= nil, true, "explains the conflict")
+  eq(#dest.frames, 1, "the sprite was left as it was")
+end)
+
+suite("append: splitByBase cannot apply, and says so", function()
+  local reports, errors = appendFrom({
+    { "hero_run_00" }, { "slime_run_00" },
+  }, { splitByBase = true })
+  eq(#errors, 0, "no errors")
+  eq(#reports, 1, "one sprite, not one per base")
+  eq(reports[1].warnings[1]:find("cannot apply when appending", 1, true) ~= nil, true,
+     "warned that the option was dropped")
+end)
+
+suite("append: a tag ending on the last frame does not swallow the new ones", function()
+  local _, _, dest = appendFrom({ { "hero_run_00" }, { "hero_run_01" } }, nil,
+    { frameCount = 3, tags = { "existing" } })
+  -- The fake models Aseprite here: inserting at frame 4 grows a tag that ends
+  -- at frame 3 unless its range is put back afterwards.
+  local existing = dest.tags[1]
+  eq(existing.name, "existing", "the tag that was already there")
+  eq(existing.fromFrame.frameNumber, 1, "still starts at frame 1")
+  eq(existing.toFrame.frameNumber, 3, "still ends at frame 3")
+end)
+
+suite("append: a clashing tag name is called out", function()
+  local reports = appendFrom({ { "hero_run_00" } }, nil, { tags = { "run" } })
+  local warned = false
+  for _, w in ipairs(reports[1].warnings) do
+    if w:find("already has a tag named run", 1, true) then warned = true end
+  end
+  eq(warned, true, "warned about the duplicate tag name")
+end)
+
+suite("append: named for the undo history", function()
+  appendFrom { { "hero_run_00" } }
+  eq(fake.app.transactions[#fake.app.transactions], "Append tagged animation",
+     "one undo step, named as an append")
 end)
 
 --------------------------------------------------------------------- run
