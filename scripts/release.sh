@@ -2,9 +2,10 @@
 # Tags a release from the version in package.json, refusing to do so unless the
 # tree is actually in a fit state to be tagged.
 #
-#   scripts/release.sh              tag and push
-#   scripts/release.sh --no-push    tag only, push it yourself
-#   scripts/release.sh --dry-run    run every check, change nothing
+#   scripts/release.sh                    tag and push
+#   scripts/release.sh --no-push          tag only, push it yourself
+#   scripts/release.sh --dry-run          run every check, change nothing
+#   scripts/release.sh --notes FILE       take the tag message from FILE
 #
 # The point is the checks rather than the convenience: a tag that disagrees with
 # the version inside the package is worse than no tag, because it is the one
@@ -14,12 +15,15 @@ cd "$(dirname "$0")/.."
 
 PUSH=1
 DRY=0
-for arg in "$@"; do
-  case "$arg" in
+NOTES=""
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-push) PUSH=0 ;;
     --dry-run) DRY=1; PUSH=0 ;;
-    *) echo "unknown option: $arg" >&2; exit 1 ;;
+    --notes) shift; NOTES="$1"; [ -n "$NOTES" ] || { echo "--notes needs a file" >&2; exit 1; } ;;
+    *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
+  shift
 done
 
 fail() { echo "release: $1" >&2; exit 1; }
@@ -44,6 +48,8 @@ echo "release: package.json says $VERSION, so the tag is $TAG"
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
   fail "$TAG already exists. Bump the version in package.json first"
 fi
+
+[ -z "$NOTES" ] || [ -f "$NOTES" ] || fail "no such notes file: $NOTES"
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$BRANCH" = "main" ] || echo "release: warning, tagging $BRANCH rather than main"
@@ -70,7 +76,11 @@ fi
 
 # ------------------------------------------------------------------- tag
 
-git tag -a "$TAG" -m "Animation Auto-Tagger $VERSION"
+if [ -n "$NOTES" ]; then
+  git tag -a "$TAG" -F "$NOTES"
+else
+  git tag -a "$TAG" -m "Animation Auto-Tagger $VERSION"
+fi
 echo "release: tagged $TAG"
 
 if [ "$PUSH" -eq 1 ]; then

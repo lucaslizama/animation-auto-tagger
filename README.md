@@ -361,8 +361,9 @@ python3 samples/make_samples.py samples/orc orc
 ## Releasing
 
 ```sh
-scripts/release.sh              # check, build, tag and push
-scripts/release.sh --dry-run    # every check, nothing changed
+scripts/release.sh                   # check, build, tag and push
+scripts/release.sh --dry-run         # every check, nothing changed
+scripts/release.sh --notes FILE      # tag message from a file
 ```
 
 The tag comes from the version in `package.json`, so the two cannot drift apart.
