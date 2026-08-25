@@ -1,0 +1,99 @@
+name: Publish to itch.io
+
+# Pushing a v* tag builds the extension and sends it to itch with butler.
+#
+# Two things have to be set up in the repository settings before this can work:
+#
+#   Secrets > BUTLER_API_KEY    from itch.io/user/settings/api-keys
+#   Variables > ITCH_TARGET     user/game:channel, all three parts, for example
+#                               lucaslizama/animation-auto-tagger:aseprite-extension
+#
+# Both are checked before butler runs, so a missing one fails with a sentence
+# rather than an authentication error from somewhere inside butler.
+#
+# It can also be run by hand from the Actions tab, which builds and tests but
+# publishes nothing: only a tag push does that.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The suites that run against the stand-in API need only an interpreter.
+      # The end-to-end pair needs a real Aseprite, which cannot be installed
+      # here, and the runner skips them by itself when it finds none.
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+
+      - name: Run the suites
+        run: scripts/run-tests.sh
+
+      # The same check scripts/release.sh makes locally. A package whose
+      # version disagrees with the tag it went out under is the one thing
+      # nobody thinks to doubt afterwards.
+      - name: Check the tag matches the version in package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -1)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $version" >&2
+            exit 1
+          fi
+          echo "publishing $version"
+
+      - name: Build the extension
+        run: scripts/build.sh
+
+      # Kept whether or not the push happens, so a failed publish still leaves
+      # the exact file behind to look at.
+      - name: Keep the package with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: animation-auto-tagger
+          path: dist/animation-auto-tagger.aseprite-extension
+          if-no-files-found: error
+
+      # From itch's own download service rather than a third-party action, so
+      # nothing between here and them can substitute the binary.
+      - name: Fetch butler
+        run: |
+          curl -sSL -o butler.zip \
+            https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler
+          chmod +x butler/butler
+          butler/butler -V
+
+      - name: Push to itch.io
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "BUTLER_API_KEY is not set: add it under Settings > Secrets and variables > Actions" >&2
+            exit 1
+          fi
+          if [ -z "$ITCH_TARGET" ]; then
+            echo "ITCH_TARGET is not set: add it as a repository variable, as user/game:channel" >&2
+            exit 1
+          fi
+          case "$ITCH_TARGET" in
+            */*:*) ;;
+            *) echo "ITCH_TARGET should look like user/game:channel, got $ITCH_TARGET" >&2; exit 1 ;;
+          esac
+
+          butler/butler push \
+            dist/animation-auto-tagger.aseprite-extension \
+            "$ITCH_TARGET" \
+            --userversion "${GITHUB_REF_NAME#v}"

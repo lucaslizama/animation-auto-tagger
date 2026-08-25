@@ -62,6 +62,14 @@ run_e2e() {
   fi
 }
 
+# A path that was set but is not there would otherwise run and fail with a
+# bare 127, which says nothing about what went wrong.
+if [ -n "$ASEPRITE" ] && [ ! -x "$ASEPRITE" ]; then
+  echo
+  echo "ASEPRITE is set to $ASEPRITE, which is not an executable" >&2
+  exit 1
+fi
+
 if [ -n "$ASEPRITE" ]; then
   e2e_failed=0
   run_e2e "end-to-end (real Aseprite)" \

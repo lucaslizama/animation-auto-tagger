@@ -405,6 +405,33 @@ aseprite --batch --script-param base=orc --script tests/make_samples.lua
 
 It prints where they went.
 
+## Publishing
+
+Pushing a `v*` tag runs `.github/workflows/publish.yml`, which builds the
+extension and sends it to itch.io with butler. Two things have to exist in the
+repository settings first:
+
+| | |
+| --- | --- |
+| Secret `BUTLER_API_KEY` | from itch.io/user/settings/api-keys |
+| Variable `ITCH_TARGET` | `user/game:channel`, all three parts |
+
+Both are checked before butler runs, so a missing one fails with a sentence
+rather than an authentication error from inside butler. The workflow also
+refuses a tag whose name disagrees with the version in `package.json`, the same
+check `scripts/release.sh` makes locally, and it keeps the built package with
+the run so a failed publish still leaves the exact file to look at.
+
+butler is fetched from itch's own download service rather than through a
+third-party action, so nothing in between can substitute the binary.
+
+It can be run by hand from the Actions tab as well, which builds and tests but
+publishes nothing. Only a tag push publishes.
+
+Worth knowing: butler pushes to a *channel*. A file uploaded to the page by hand
+is a separate upload and will still be there afterwards, so the first automated
+push may leave two downloads on the page until the manual one is removed.
+
 ## Releasing
 
 ```sh
