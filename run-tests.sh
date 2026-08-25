@@ -39,13 +39,37 @@ if [ -z "$ASEPRITE" ]; then
   done
 fi
 
+# Aseprite exits 0 whatever the script decides, so the verdict has to be read
+# out of the output instead. Without this a failing end-to-end suite scrolls
+# past and the runner still reports success.
+run_e2e() {
+  label="$1"; shift
+  echo
+  echo "== $label =="
+  out="$("$@" 2>&1)"
+  echo "$out"
+  # A FAIL marker means the suite ran and found something. No marker at all
+  # means it died partway, which must not read as a pass either.
+  if echo "$out" | grep -q "e2e-result: FAIL"; then
+    e2e_failed=1
+  elif ! echo "$out" | grep -q "e2e-result: ok"; then
+    echo "  (the suite ended without reporting a result)" >&2
+    e2e_failed=1
+  fi
+}
+
 if [ -n "$ASEPRITE" ]; then
-  echo
-  echo "== end-to-end (real Aseprite) =="
-  "$ASEPRITE" --batch --script e2e_aseprite.lua
-  echo
-  echo "== end-to-end, drag path (files opened by Aseprite itself) =="
-  "$ASEPRITE" --batch samples/hero/*.png --script e2e_dragpath.lua
+  e2e_failed=0
+  run_e2e "end-to-end (real Aseprite)" \
+    "$ASEPRITE" --batch --script e2e_aseprite.lua
+  # shellcheck disable=SC2086
+  run_e2e "end-to-end, drag path (files opened by Aseprite itself)" \
+    "$ASEPRITE" --batch samples/hero/*.png --script e2e_dragpath.lua
+  if [ "$e2e_failed" -ne 0 ]; then
+    echo
+    echo "end-to-end suite failed" >&2
+    exit 1
+  fi
 else
   echo
   echo "(no Aseprite found - skipping the end-to-end check; set ASEPRITE=/path/to/aseprite)"

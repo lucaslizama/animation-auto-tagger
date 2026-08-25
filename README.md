@@ -336,8 +336,17 @@ python3 samples/make_samples.py samples/orc orc
 ## Tests
 
 ```sh
-./run-tests.sh
+./run-tests.sh          # Linux, macOS
 ```
+
+```powershell
+.\run-tests.ps1         # Windows
+```
+
+Aseprite exits 0 no matter what a script decides — its Lua has no `os.exit` —
+so the end-to-end suites print `e2e-result: ok` or `e2e-result: FAIL` and both
+runners read the verdict from that. Without it a failing end-to-end run scrolls
+past and the runner still reports success.
 
 `naming.lua` is dependency-free, and the builder, watcher and collector suites
 run against `tests/fake_aseprite.lua`, a stand-in covering the API surface those

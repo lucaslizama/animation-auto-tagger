@@ -422,4 +422,7 @@ sources.release(pool6, cfg)
 selfTarget:close()
 
 print(("\n%d checks, %d failure(s)"):format(checks, failures))
-if failures > 0 then os.exit(1) end
+-- Aseprite's Lua has no os.exit, so the exit code cannot carry the verdict and
+-- a runner reading it would call a failing suite a pass. This line is what the
+-- runner actually checks.
+print(failures > 0 and "e2e-result: FAIL" or "e2e-result: ok")
