@@ -337,7 +337,9 @@ extension's job ends at producing a correctly tagged sprite.
 
 ## Sample frames
 
-`samples/hero/` holds 20 frames to try it on:
+The end-to-end suites build from 20 generated frames rather than any kept in the
+repository. They are written into a temp directory the first time they are
+needed, and reused after that:
 
 | tag | frames | size |
 | --- | --- | --- |
@@ -347,16 +349,23 @@ extension's job ends at producing a correctly tagged sprite.
 | `jump` | 3 | 32x32 |
 | `hurt` | 2 | 32x32 |
 
-Each one draws its animation letter and its frame index, so the built timeline
-is easy to check by eye. The attack frames are deliberately wider, which is what
-exercises the canvas-size and alignment options.
+Each is a flat fill, a colour per animation lightened per frame, so a glance at
+the built timeline says whether the ordering came out right. They are filled edge
+to edge deliberately: a transparent margin would shrink each cel's bounds and
+make every size the suites check meaningless. The attack frames are wider than
+the rest on purpose, which is what exercises the canvas-size and alignment
+options.
 
-Regenerate them, or make a second character to try **one sprite per base name**,
-with:
+Aseprite writes them itself, so there is nothing to install and nothing to tidy
+up. To make them by hand, or to make a second character for trying **one sprite
+per base name**:
 
 ```sh
-python3 samples/make_samples.py samples/orc orc
+aseprite --batch --script tests/make_samples.lua
+aseprite --batch --script-param base=orc --script tests/make_samples.lua
 ```
+
+It prints where they went.
 
 ## Releasing
 
@@ -420,5 +429,5 @@ flattening, and it is the only place the two layouts differ.
 | `tests/e2e_aseprite.lua` | End-to-end check run through a real Aseprite in batch mode |
 | `tests/e2e_dragpath.lua` | The same, but over files Aseprite opened itself — the drag case |
 | `scripts/` | `install.sh` copies into Aseprite for development, `build.sh` packs a distributable extension, `run-tests.sh` and `run-tests.ps1` run the suites, `release.sh` tags a version |
-| `samples/` | Twenty sample frames across five animations, used by the end-to-end suites |
+| `tests/samples.lua` | The sample frames the end-to-end suites build from, written on demand |
 | `store/` | Release notes, the itch.io page copy and its cover art. Nothing here ships in the extension |

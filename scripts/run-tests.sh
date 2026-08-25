@@ -66,9 +66,16 @@ if [ -n "$ASEPRITE" ]; then
   e2e_failed=0
   run_e2e "end-to-end (real Aseprite)" \
     "$ASEPRITE" --batch --script tests/e2e_aseprite.lua
+
+  # The drag path needs Aseprite to open the frames itself, so they have to
+  # exist before it starts. They are written to a temp directory rather than
+  # kept in the repository, and this asks where that was.
+  SAMPLES="$("$ASEPRITE" --batch --script tests/make_samples.lua \
+             | sed -n 's/^samples-dir: //p')"
+  [ -n "$SAMPLES" ] || { echo "could not make the sample frames" >&2; exit 1; }
   # shellcheck disable=SC2086
   run_e2e "end-to-end, drag path (files opened by Aseprite itself)" \
-    "$ASEPRITE" --batch samples/hero/*.png --script tests/e2e_dragpath.lua
+    "$ASEPRITE" --batch "$SAMPLES"/*.png --script tests/e2e_dragpath.lua
   if [ "$e2e_failed" -ne 0 ]; then
     echo
     echo "end-to-end suite failed" >&2

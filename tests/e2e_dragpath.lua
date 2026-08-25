@@ -1,5 +1,8 @@
 -- The drag path, as close as a script can get to it:
---   aseprite --batch samples/hero/*.png --script e2e_dragpath.lua
+--   aseprite --batch <every sample frame> --script tests/e2e_dragpath.lua
+--
+-- The frames come from tests/make_samples.lua, which the runners call first so
+-- the files exist before Aseprite starts.
 --
 -- Aseprite opens the files through its own path first, which folds each
 -- numbered run into a single sprite. The plugin then has to rebuild the same

@@ -1,14 +1,15 @@
 -- End-to-end check against a real Aseprite, no UI involved:
 --   aseprite --batch --script e2e_aseprite.lua
 --
--- Builds a tagged sprite from samples/hero, saves it, reopens it and checks the
+-- Builds a tagged sprite from the generated sample frames, saves it, reopens it
+-- and checks the
 -- tags survived the round trip. The other suites run against a fake API; this
 -- one is the answer to "but does Aseprite actually do that?".
 
 -- Run from the repo root: aseprite --batch --script tests/e2e_aseprite.lua
 -- The modules live in src/, which is not on Aseprite's default search path.
 local here = (debug.getinfo(1, "S").source:sub(2)):match("^(.*)[/\\]") or "."
-package.path = here .. "/../src/?.lua;" .. package.path
+package.path = here .. "/../src/?.lua;" .. here .. "/?.lua;" .. package.path
 
 local naming  = require("naming")
 local config  = require("config")
@@ -25,9 +26,8 @@ local function eq(a, e, msg)
   check(a == e, ("%s (expected %s, got %s)"):format(msg, tostring(e), tostring(a)))
 end
 
--- This file lives in tests/, so the samples are a level up from it.
-local root = app.fs.filePath(app.fs.normalizePath(debug.getinfo(1, "S").source:sub(2)))
-local samples = app.fs.joinPath(app.fs.filePath(root), "samples/hero")
+-- Written on demand rather than kept in the repository; see tests/samples.lua.
+local samples = require("samples").ensure()
 print("samples: " .. samples)
 
 local cfg = config.new()

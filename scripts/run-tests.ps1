@@ -85,9 +85,17 @@ function Invoke-E2E {
 
 $ok = Invoke-E2E "end-to-end (real Aseprite)" @("--batch", "--script", "tests\e2e_aseprite.lua")
 
-# The drag path suite wants the sample frames handed to Aseprite the way a drop
-# would, so the names are expanded here rather than left to the shell.
-$frames = Get-ChildItem -Path "samples\hero\*.png" | ForEach-Object { $_.FullName }
+# The drag path suite needs Aseprite to open the frames itself, so they have to
+# exist before it starts. They are written to a temp directory rather than kept
+# in the repository; this makes them and asks where they went.
+$made = & $aseprite --batch --script "tests\make_samples.lua" 2>&1 | Out-String
+$samplesDir = ([regex]::Match($made, "samples-dir:\s*(.+)")).Groups[1].Value.Trim()
+if (-not $samplesDir) {
+    Write-Host "could not make the sample frames" -ForegroundColor Red
+    Write-Host $made
+    exit 1
+}
+$frames = Get-ChildItem -Path (Join-Path $samplesDir "*.png") | ForEach-Object { $_.FullName }
 $dragArgs = @("--batch") + $frames + @("--script", "tests\e2e_dragpath.lua")
 $okDrag = Invoke-E2E "end-to-end, drag path (files opened by Aseprite itself)" $dragArgs
 
