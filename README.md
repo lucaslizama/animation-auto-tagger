@@ -20,7 +20,7 @@ hero_run_02.png   ┘
 ### From the packaged extension
 
 ```sh
-./build.sh          # writes dist/animation-auto-tagger.aseprite-extension
+scripts/build.sh    # writes dist/animation-auto-tagger.aseprite-extension
 ```
 
 `dist/` is git-ignored, so a fresh clone has to build it first. Then in Aseprite
@@ -33,7 +33,7 @@ plain text, no compiled anything, and every path it touches goes through
 
 ### By hand
 
-Copy `package.json` and the `.lua` files (the list `install.sh` and `build.sh`
+Copy `package.json` and the `.lua` files from `src/` (the list both scripts
 both read is in `plugin-files.txt`) into a folder inside Aseprite's extensions
 directory:
 
@@ -44,7 +44,8 @@ directory:
 | macOS | `~/Library/Application Support/Aseprite/extensions/animation-auto-tagger/` |
 
 `README.md` and `LICENSE` are along for the ride and can be left out. On Linux
-`./install.sh` does all of this; run it again after an edit and restart Aseprite.
+`scripts/install.sh` does all of this; run it again after an edit and restart
+Aseprite. It keeps the plugin's saved settings across a reinstall.
 
 It has to be a real folder, **not a symlink**: Aseprite does not follow one when
 it scans for extensions, and it says nothing when it skips one — the plugin just
@@ -114,7 +115,7 @@ before any script runs.
 Which suggests the better move — **drag one frame, not twenty.** A single path is
 nowhere near the character limit, so nothing is truncated and no error appears at
 all; the folder completion turns that one file back into the whole character.
-One file in, twenty frames and five tags out. `run-tests.sh` checks that too.
+One file in, twenty frames and five tags out. The test suite checks that too.
 
 Watching is still off by default; the two menu commands below need none of this
 machinery.
@@ -162,7 +163,7 @@ way: drag twenty frames in and Aseprite hands you five sprites, each holding a
 whole run, not twenty sprites holding one frame each. Those frames are real, so
 they are all kept — and any sibling file whose frames a sequence has already
 swallowed is skipped instead of being counted twice. Both routes end at the same
-20-frame, 5-tag sprite; `run-tests.sh` checks that they agree.
+20-frame, 5-tag sprite; the test suite checks that they agree.
 
 That is also why the dialog counts frames rather than files: one entry can be
 six frames.
@@ -336,11 +337,11 @@ python3 samples/make_samples.py samples/orc orc
 ## Tests
 
 ```sh
-./run-tests.sh          # Linux, macOS
+scripts/run-tests.sh     # Linux, macOS
 ```
 
 ```powershell
-.\run-tests.ps1         # Windows
+.\scripts\run-tests.ps1  # Windows
 ```
 
 Aseprite exits 0 no matter what a script decides — its Lua has no `os.exit` —
@@ -363,16 +364,23 @@ which no stand-in would have predicted.
 
 ## Layout
 
-| File | |
+The sources live in `src/`, but Aseprite resolves an extension's `require`
+calls from the extension root, so the packaged and installed extension is flat:
+`src/naming.lua` lands as `naming.lua` beside the rest. Both scripts do that
+flattening, and it is the only place the two layouts differ.
+
+| Where | |
 | --- | --- |
-| `main.lua` | Plugin entry point, menu commands, settings dialog |
-| `naming.lua` | Filename parsing and grouping (pure Lua, no Aseprite) |
-| `collect.lua` | Gathering candidate frames from a folder or from open sprites |
-| `sources.lua` | Reading source frames — as images where possible, sprites where not |
-| `builder.lua` | Assembling the tagged sprite |
-| `ui.lua` | The main dialog |
-| `watcher.lua` | Timer-based drop detection |
-| `config.lua` | Defaults and preference persistence |
-| `e2e_aseprite.lua` | End-to-end check run through a real Aseprite in batch mode |
-| `e2e_dragpath.lua` | The same, but over files Aseprite opened itself — the drag case |
-| `install.sh` / `build.sh` | Copy into Aseprite for development / pack a distributable extension |
+| `src/main.lua` | Plugin entry point, menu commands, settings dialog |
+| `src/naming.lua` | Filename parsing and grouping (pure Lua, no Aseprite) |
+| `src/collect.lua` | Gathering candidate frames from a folder or from open sprites |
+| `src/sources.lua` | Reading source frames — as images where possible, sprites where not |
+| `src/builder.lua` | Assembling the tagged sprite |
+| `src/ui.lua` | The main dialog |
+| `src/watcher.lua` | Timer-based drop detection |
+| `src/config.lua` | Defaults and preference persistence |
+| `tests/e2e_aseprite.lua` | End-to-end check run through a real Aseprite in batch mode |
+| `tests/e2e_dragpath.lua` | The same, but over files Aseprite opened itself — the drag case |
+| `scripts/` | `install.sh` copies into Aseprite for development, `build.sh` packs a distributable extension, `run-tests.sh` and `run-tests.ps1` run the suites |
+| `samples/` | Twenty sample frames across five animations, used by the end-to-end suites |
+| `store/` | Release notes, the itch.io page copy and its cover art. Nothing here ships in the extension |

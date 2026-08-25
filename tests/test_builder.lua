@@ -1,7 +1,7 @@
 -- Tests for builder.lua / sources.lua against the fake Aseprite API.
 --   lua tests/test_builder.lua
 
-package.path = "./?.lua;./tests/?.lua;../?.lua;../tests/?.lua;" .. package.path
+package.path = "./src/?.lua;./tests/?.lua;../src/?.lua;../tests/?.lua;" .. package.path
 
 local fake = require("fake_aseprite").install()
 local naming  = require("naming")

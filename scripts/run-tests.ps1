@@ -9,7 +9,8 @@
 # Set $env:ASEPRITE first if Aseprite lives somewhere unusual.
 
 $ErrorActionPreference = "Stop"
-Set-Location -Path $PSScriptRoot
+# Paths below are relative to the repo root, one level up from this script.
+Set-Location -Path (Join-Path $PSScriptRoot "..")
 
 # ------------------------------------------------------------------- Aseprite
 
@@ -81,12 +82,12 @@ function Invoke-E2E {
     return $true
 }
 
-$ok = Invoke-E2E "end-to-end (real Aseprite)" @("--batch", "--script", "e2e_aseprite.lua")
+$ok = Invoke-E2E "end-to-end (real Aseprite)" @("--batch", "--script", "tests\e2e_aseprite.lua")
 
 # The drag path suite wants the sample frames handed to Aseprite the way a drop
 # would, so the names are expanded here rather than left to the shell.
 $frames = Get-ChildItem -Path "samples\hero\*.png" | ForEach-Object { $_.FullName }
-$dragArgs = @("--batch") + $frames + @("--script", "e2e_dragpath.lua")
+$dragArgs = @("--batch") + $frames + @("--script", "tests\e2e_dragpath.lua")
 $okDrag = Invoke-E2E "end-to-end, drag path (files opened by Aseprite itself)" $dragArgs
 
 if (-not ($ok -and $okDrag)) {

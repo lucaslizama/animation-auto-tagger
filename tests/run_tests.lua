@@ -2,7 +2,7 @@
 --   lua tests/run_tests.lua
 -- (Aseprite is not needed; naming.lua has no editor dependencies.)
 
-package.path = "./?.lua;../?.lua;" .. package.path
+package.path = "./src/?.lua;../src/?.lua;" .. package.path
 local naming = require("naming")
 
 local failures, checks = 0, 0

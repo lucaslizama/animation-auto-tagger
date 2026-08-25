@@ -1,7 +1,7 @@
 -- Tests for the drop-detection debounce in watcher.lua.
 --   lua tests/test_watcher.lua
 
-package.path = "./?.lua;./tests/?.lua;../?.lua;../tests/?.lua;" .. package.path
+package.path = "./src/?.lua;./tests/?.lua;../src/?.lua;../tests/?.lua;" .. package.path
 
 local fake    = require("fake_aseprite").install()
 local config  = require("config")

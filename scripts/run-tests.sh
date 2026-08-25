@@ -3,7 +3,8 @@
 # naming.lua is dependency-free and the builder tests run against the fake API
 # in tests/fake_aseprite.lua.
 set -e
-cd "$(dirname "$0")"
+# Every path below is relative to the repo root, which is one level up now.
+cd "$(dirname "$0")/.."
 
 LUA="${LUA:-}"
 if [ -z "$LUA" ]; then
@@ -61,10 +62,10 @@ run_e2e() {
 if [ -n "$ASEPRITE" ]; then
   e2e_failed=0
   run_e2e "end-to-end (real Aseprite)" \
-    "$ASEPRITE" --batch --script e2e_aseprite.lua
+    "$ASEPRITE" --batch --script tests/e2e_aseprite.lua
   # shellcheck disable=SC2086
   run_e2e "end-to-end, drag path (files opened by Aseprite itself)" \
-    "$ASEPRITE" --batch samples/hero/*.png --script e2e_dragpath.lua
+    "$ASEPRITE" --batch samples/hero/*.png --script tests/e2e_dragpath.lua
   if [ "$e2e_failed" -ne 0 ]; then
     echo
     echo "end-to-end suite failed" >&2

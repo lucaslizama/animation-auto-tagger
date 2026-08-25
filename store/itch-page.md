@@ -142,13 +142,14 @@ MIT licensed, source on GitHub. Bug reports and pull requests welcome.
 
 ## Assets still to make
 
-**Cover image, 630 by 500.** Done: `cover.png`, drawn from `cover.svg`. It shows
+**Cover image, 630 by 500.** Done: `store/cover.png`, drawn from
+`store/cover.svg`. It shows
 the transformation itself, a column of numbered filenames becoming a timeline
 with coloured tag bars, and it was checked at 315 and 200 pixels wide, where the
 title and the tag bars still read and the filenames collapse into texture. To
 change it, edit the SVG and re-export:
 
-    rsvg-convert -w 630 -h 500 cover.svg -o cover.png
+    rsvg-convert -w 630 -h 500 store/cover.svg -o store/cover.png
 
 **A short GIF, twenty seconds at most.** This sells the tool better than any
 paragraph above. Frames dragged onto Aseprite, the prompt appearing, one
@@ -163,5 +164,5 @@ replace mode, ideally the same sprite with a tag grown from three frames to six.
 
 Version 1.1 has not been run on Windows or macOS yet. The 1.0 build was tested on
 Windows and worked, and the automated suites can be run on another machine with
-`run-tests.ps1`, but the dialogs need someone to click them. Worth doing before
+`scripts/run-tests.ps1`, but the dialogs need someone to click them. Worth doing before
 the page goes live, since the platform claim on the upload is a promise.

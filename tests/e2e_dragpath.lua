@@ -5,6 +5,11 @@
 -- numbered run into a single sprite. The plugin then has to rebuild the same
 -- 20-frame, 5-tag result it gets from the folder.
 
+-- Run from the repo root: aseprite --batch --script tests/e2e_dragpath.lua
+-- The modules live in src/, which is not on Aseprite's default search path.
+local here = (debug.getinfo(1, "S").source:sub(2)):match("^(.*)[/\\]") or "."
+package.path = here .. "/../src/?.lua;" .. package.path
+
 local naming  = require("naming")
 local config  = require("config")
 local collect = require("collect")
