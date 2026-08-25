@@ -428,6 +428,6 @@ flattening, and it is the only place the two layouts differ.
 | `src/config.lua` | Defaults and preference persistence |
 | `tests/e2e_aseprite.lua` | End-to-end check run through a real Aseprite in batch mode |
 | `tests/e2e_dragpath.lua` | The same, but over files Aseprite opened itself — the drag case |
-| `scripts/` | `install.sh` copies into Aseprite for development, `build.sh` packs a distributable extension, `run-tests.sh` and `run-tests.ps1` run the suites, `release.sh` tags a version |
+| `scripts/` | `install.sh` copies into Aseprite for development, `build.sh` packs a distributable extension, `run-tests.sh` and `run-tests.ps1` run the suites, `release.sh` tags a version, `make-gif.sh` turns a screen recording into a store-page GIF |
 | `tests/samples.lua` | The sample frames the end-to-end suites build from, written on demand |
 | `store/` | Release notes, the itch.io page copy and its cover art. Nothing here ships in the extension |
