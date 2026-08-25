@@ -514,7 +514,23 @@ function M.showReorderDrag(sprite)
   local function rowLabels(position)
     local tag = sprite.tags[order[position]]
     local length = tag.toFrame.frameNumber - tag.fromFrame.frameNumber + 1
-    return ("%d.  %s"):format(position, tag.name), plural(length, "frame")
+    return tostring(position), tag.name, plural(length, "frame")
+  end
+
+  -- The left edge of every row: two columns of dots, which is the one mark a
+  -- pointer reads as "this can be picked up" without a word of explanation.
+  local function paintGrip(gc, top, height)
+    local dot = 1
+    local gap = 2
+    local x = 5
+    local rows = 3
+    local blockHeight = rows * dot + (rows - 1) * gap
+    local y = top + (height - blockHeight) // 2
+    for column = 0, 1 do
+      for row = 0, rows - 1 do
+        gc:fillRect(Rectangle(x + column * (dot + gap), y + row * (dot + gap), dot, dot))
+      end
+    end
   end
 
   --- Which row a y coordinate falls in, kept inside the list either way.
@@ -533,6 +549,11 @@ function M.showReorderDrag(sprite)
       local gc = ev.context
       rowHeight = math.max(1, gc.height // rows)
 
+      local GRIP = 16     -- the dots
+      local GUTTER = 26   -- the row number, right-aligned against its divider
+      local border = app.theme.color.popup_window_border
+      local divider = app.theme.color.palette_entries_separator
+
       for i = 1, rows do
         local top = (i - 1) * rowHeight
         local face, ink
@@ -547,17 +568,48 @@ function M.showReorderDrag(sprite)
         gc.color = app.theme.color[face]
         gc:fillRect(Rectangle(0, top, gc.width, rowHeight))
 
+        local number, name, count = rowLabels(i)
         gc.color = app.theme.color[ink]
-        local name, count = rowLabels(i)
         local size = gc:measureText(name)
         local baseline = top + math.max(0, (rowHeight - size.height) // 2)
-        gc:fillText(name, 6, baseline)
+
+        -- The grip and the row number sit back a little, so the name is what
+        -- the eye lands on.
+        gc.opacity = 140
+        paintGrip(gc, top, rowHeight)
+        local numberSize = gc:measureText(number)
+        gc:fillText(number, math.max(GRIP, GRIP + GUTTER - 8 - numberSize.width), baseline)
+        gc.opacity = 255
+
+        gc:fillText(name, GRIP + GUTTER + 6, baseline)
         local right = gc:measureText(count)
         gc:fillText(count, math.max(0, gc.width - right.width - 6), baseline)
+
+        -- A line under every row but the last, so they read as rows rather
+        -- than as stripes that happen to alternate.
+        if i < rows then
+          gc.color = divider
+          gc:fillRect(Rectangle(0, top + rowHeight - 1, gc.width, 1))
+        end
+      end
+
+      -- The divider between the numbers and the names, full height, and the
+      -- inset edge around the lot: the shape Aseprite gives its own lists.
+      gc.color = divider
+      gc:fillRect(Rectangle(GRIP + GUTTER, 0, 1, gc.height))
+      gc.color = border
+      gc:strokeRect(Rectangle(0, 0, gc.width, gc.height))
+
+      -- The row being carried gets an edge of its own, so it reads as lifted
+      -- off the others rather than merely coloured differently.
+      if dragging then
+        gc:strokeRect(Rectangle(0, (dragging - 1) * rowHeight, gc.width, rowHeight))
       end
     end,
+    mousecursor = MouseCursor.GRAB,
     onmousedown = function(ev)
       dragging = rowAt(ev.y)
+      dlg:modify { id = "list", mousecursor = MouseCursor.MOVE }
       dlg:repaint()
     end,
     onmousemove = function(ev)
@@ -573,12 +625,16 @@ function M.showReorderDrag(sprite)
     end,
     onmouseup = function()
       dragging = nil
+      dlg:modify { id = "list", mousecursor = MouseCursor.GRAB }
       dlg:repaint()
     end,
   }
 
+  -- Set again after the widget exists, in case the constructor ignored it.
+  dlg:modify { id = "list", mousecursor = MouseCursor.GRAB }
+
   dlg:newrow()
-  dlg:label { label = "", text = "drag a row to move it" }
+  dlg:label { label = "", text = "drag a row by its handle to move it" }
   dlg:newrow()
   dlg:label { label = "", text = "frames belonging to no tag are moved to the end" }
 
