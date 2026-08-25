@@ -414,7 +414,13 @@ repository settings first:
 | | |
 | --- | --- |
 | Secret `BUTLER_API_KEY` | from itch.io/user/settings/api-keys |
-| Variable `ITCH_TARGET` | `user/game:channel`, all three parts |
+| Variable `ITCH_TARGET` | `user/game:channel`, all three parts, for example `lucaslizama/animation-auto-tagger:win-linux-mac` |
+
+The `user/game` half comes from the itch page URL rather than from GitHub. The
+channel half decides the platform tags: butler reads `win`, `linux`, `mac` and
+`android` out of the channel name and one channel may carry several, so
+`win-linux-mac` tags the one file for all three, which is what it is. Channel
+names are kebab-case by convention.
 
 Both are checked before butler runs, so a missing one fails with a sentence
 rather than an authentication error from inside butler. The workflow also
@@ -428,9 +434,15 @@ third-party action, so nothing in between can substitute the binary.
 It can be run by hand from the Actions tab as well, which builds and tests but
 publishes nothing. Only a tag push publishes.
 
-Worth knowing: butler pushes to a *channel*. A file uploaded to the page by hand
-is a separate upload and will still be there afterwards, so the first automated
-push may leave two downloads on the page until the manual one is removed.
+Two things worth knowing. butler pushes to a *channel*, and a file uploaded to
+the page by hand is a separate upload that will still be there afterwards, so
+the first automated push may leave two downloads on the page until the manual one
+is removed.
+
+And the extension package is a zip with a different extension, which butler
+could reasonably have unpacked and published as loose files. It does not: a
+`--dry-run` against it reports one file, pushed whole, which is what anyone
+installing it needs.
 
 ## Releasing
 

@@ -6,7 +6,11 @@ name: Publish to itch.io
 #
 #   Secrets > BUTLER_API_KEY    from itch.io/user/settings/api-keys
 #   Variables > ITCH_TARGET     user/game:channel, all three parts, for example
-#                               lucaslizama/animation-auto-tagger:aseprite-extension
+#                               lucaslizama/animation-auto-tagger:win-linux-mac
+#
+# The channel half decides the platform tags: butler reads win, linux, mac and
+# android out of the channel name, and one channel may carry several. The
+# package is one file that installs on all three, so the channel says so.
 #
 # Both are checked before butler runs, so a missing one fails with a sentence
 # rather than an authentication error from somewhere inside butler.
