@@ -71,6 +71,30 @@ options mid-session will not silently exclude something different from what was 
 Ticks made on the drop prompt carry across if the full options are opened from it. The summary
 counts what is actually ticked, and the build button greys out when nothing is.
 
+## Putting the animations in order
+
+Tags come out alphabetically by default, or in the order the files were read, or
+in an order arranged by hand: the third option turns on arrows beside each
+animation in the list, and the tags are laid down the timeline in whatever order
+that list ends up in.
+
+For a sprite that already exists there is a separate command that reorders the
+tags it already has. It lists them with the same arrows, and on applying it
+rearranges the timeline so the frames really move: every layer, every cel
+position, every frame duration travels with its own tag, and the tags keep their
+names, directions and colours. Aseprite has no command for moving frames, so
+this works by lifting the cels off the timeline and writing them back in the new
+order, all inside one undo step.
+
+Two cases are refused rather than guessed at. Tags that share frames have no
+order to be put in, so that is explained instead of attempted. Frames belonging
+to no tag are moved to the end and keep their own relative order, since once the
+blocks around them have moved there is nowhere else for them to be.
+
+One side effect worth knowing: cels that Aseprite had linked, meaning several
+frames sharing one image, become separate copies when they move. It looks
+identical and takes a little more room. The result says so when it happens.
+
 ## Where the frames go
 
 The result can be a new sprite, which is the ordinary case, or it can be added to a sprite that is

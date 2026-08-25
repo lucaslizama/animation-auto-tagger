@@ -72,6 +72,19 @@ Every animation it detects gets a checkbox before anything is built. When a
 folder holds a whole character but only the walk cycle was redrawn, tick that one
 and leave the rest alone.
 
+### Put them in the order that makes sense
+
+Tag order can be alphabetical, the order the files were read, or arranged by
+hand with the arrows beside each animation.
+
+Sprites that already exist get their own command for it. It lists the tags with
+the same arrows and, on applying, rearranges the timeline so the frames actually
+move: every layer, every cel position, every frame duration travels with its own
+tag, and the tags keep their names, directions and colours. Aseprite offers no
+way to do this short of dragging frame ranges around by hand. Tags that share
+frames are refused rather than guessed at, and it is one undo step like
+everything else.
+
 ### Three ways in
 
 Point it at a folder. Or read the sprites already open. Or just drag frames onto

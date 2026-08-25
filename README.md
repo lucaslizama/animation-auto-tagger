@@ -358,6 +358,18 @@ with:
 python3 samples/make_samples.py samples/orc orc
 ```
 
+## Releasing
+
+```sh
+scripts/release.sh              # check, build, tag and push
+scripts/release.sh --dry-run    # every check, nothing changed
+```
+
+The tag comes from the version in `package.json`, so the two cannot drift apart.
+It refuses to tag an unclean tree, a version that is already tagged, a
+`plugin-files.txt` naming a file that does not exist, or a build whose tests do
+not pass.
+
 ## Tests
 
 ```sh
@@ -406,6 +418,6 @@ flattening, and it is the only place the two layouts differ.
 | `src/config.lua` | Defaults and preference persistence |
 | `tests/e2e_aseprite.lua` | End-to-end check run through a real Aseprite in batch mode |
 | `tests/e2e_dragpath.lua` | The same, but over files Aseprite opened itself — the drag case |
-| `scripts/` | `install.sh` copies into Aseprite for development, `build.sh` packs a distributable extension, `run-tests.sh` and `run-tests.ps1` run the suites |
+| `scripts/` | `install.sh` copies into Aseprite for development, `build.sh` packs a distributable extension, `run-tests.sh` and `run-tests.ps1` run the suites, `release.sh` tags a version |
 | `samples/` | Twenty sample frames across five animations, used by the end-to-end suites |
 | `store/` | Release notes, the itch.io page copy and its cover art. Nothing here ships in the extension |
