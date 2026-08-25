@@ -5,6 +5,7 @@ src/config.lua
 src/collect.lua
 src/sources.lua
 src/builder.lua
+src/reorder.lua
 src/ui.lua
 src/watcher.lua
 README.md

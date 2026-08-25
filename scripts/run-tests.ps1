@@ -51,7 +51,8 @@ if ($lua) {
     foreach ($suite in @(
         @{ name = "naming";  file = "tests\run_tests.lua" },
         @{ name = "builder"; file = "tests\test_builder.lua" },
-        @{ name = "watcher"; file = "tests\test_watcher.lua" }
+        @{ name = "watcher"; file = "tests\test_watcher.lua" },
+        @{ name = "reorder"; file = "tests\test_reorder.lua" }
     )) {
         Write-Host ""
         Write-Host "== $($suite.name) =="

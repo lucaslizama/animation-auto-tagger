@@ -109,7 +109,7 @@ local function onBatch(sprites)
   prompt:button {
     text = "Build", focus = true,
     onclick = function()
-      ui.run(entries, cfg, folder, nil, excluded)
+      ui.run(entries, cfg, folder, { excluded = excluded })
       prompt:close()
     end,
   }
@@ -248,6 +248,16 @@ function init(plugin)
         entries = collect.fromFolder(folder)
       end
       openDialog(entries, folder, "Tag Frames in a Folder")
+    end,
+  }
+
+  plugin:newCommand {
+    id = "AnimAutoTagReorder",
+    title = "Reorder Tags...",
+    group = "anim_auto_tagger",
+    onenabled = function() return app.sprite ~= nil and #app.sprite.tags > 1 end,
+    onclick = function()
+      ui.showReorder(app.sprite)
     end,
   }
 

@@ -24,7 +24,8 @@ local Image = {}
 Image.__index = Image
 
 local function newImage(w, h, mode)
-  return setmetatable({ width = w, height = h, colorMode = mode, drawn = {} }, Image)
+  -- `id` is what Aseprite uses to tell a linked cel from an independent one.
+  return setmetatable({ width = w, height = h, colorMode = mode, drawn = {}, id = newId() }, Image)
 end
 
 function Image:drawSprite(sprite, frame, pos)
@@ -152,7 +153,8 @@ end
 
 function Sprite:newCel(layer, frame, image, position)
   local cel = { layer = layer, frameNumber = frame, image = image,
-                position = position or Point(0, 0), sprite = self }
+                position = position or Point(0, 0), sprite = self,
+                opacity = 255, zIndex = 0, data = "" }
   layer.celsByFrame[frame] = cel
   return cel
 end
@@ -288,6 +290,19 @@ function F.install()
   end })
 
   _G.Image = setmetatable({}, { __call = function(_, a, b, c)
+    -- Image(other) copies, which is what lets a frame be lifted off the
+    -- timeline before anything is written back over it.
+    if type(a) == "table" and a.drawn then
+      -- A copy carries everything the original had, with an id of its own:
+      -- that is what makes it a separate image rather than a second reference.
+      local copy = newImage(a.width, a.height, a.colorMode)
+      for k, v in pairs(a) do
+        if k ~= "id" and k ~= "drawn" then copy[k] = v end
+      end
+      for i, d in ipairs(a.drawn) do copy.drawn[i] = d end
+      copy.copyOf = a.id
+      return copy
+    end
     if type(a) == "table" then
       -- Image{fromFile=} reads one still frame and opens no sprite, which is
       -- the whole point of it: nothing is added to F.app.sprites here.

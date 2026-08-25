@@ -9,6 +9,7 @@ local config  = require("config")
 local collect = require("collect")
 local sources = require("sources")
 local builder = require("builder")
+local reorder = require("reorder")
 
 local M = {}
 
@@ -30,8 +31,9 @@ local ANIM_MODES = {
   { "whole name is the animation",   "whole" },
 }
 local GROUP_ORDERS = {
-  { "alphabetical", "alphabetical" },
-  { "file order",   "first-seen" },
+  { "alphabetical",     "alphabetical" },
+  { "file order",       "first-seen" },
+  { "as arranged below", "listed" },
 }
 local EXISTING_TAGS = {
   { "add alongside",   "append" },
@@ -148,6 +150,35 @@ function M.withoutExcluded(grouped, excluded)
   return copy
 end
 
+--- A copy of `grouped` with its animations put in `names` order.
+--
+-- Anything not named keeps its relative place at the end, so an order that
+-- went stale when the naming options changed degrades rather than losing
+-- animations.
+function M.withOrder(grouped, names)
+  if not names or #names == 0 then return grouped end
+  local rank = {}
+  for i, name in ipairs(names) do
+    if rank[name] == nil then rank[name] = i end
+  end
+
+  local ordered = {}
+  for i, g in ipairs(grouped.groups) do
+    ordered[#ordered + 1] = { group = g, rank = rank[g.name] or (#names + i), seen = i }
+  end
+  table.sort(ordered, function(a, b)
+    if a.rank ~= b.rank then return a.rank < b.rank end
+    return a.seen < b.seen
+  end)
+
+  local groups = {}
+  for i, entry in ipairs(ordered) do groups[i] = entry.group end
+  local copy = {}
+  for k, v in pairs(grouped) do copy[k] = v end
+  copy.groups = groups
+  return copy
+end
+
 --- How many animations are still ticked.
 function M.selectedGroups(grouped, excluded)
   return #M.withoutExcluded(grouped, excluded).groups
@@ -230,12 +261,20 @@ local function readConfig(dlg, base)
 end
 
 --- Do the build and report what happened.
--- Returns true when at least one sprite was produced. `target` is the sprite
--- to append to; without one, an appending build falls back to the active
--- sprite, which is all the watcher's auto-build path can know about.
--- `excluded` is a set of tag names the user unticked in the dialog.
-function M.run(entries, cfg, folder, target, excluded)
+-- Returns true when at least one sprite was produced. `opts` may carry:
+--   target    the sprite to append to; without one, an appending build falls
+--             back to the active sprite, which is all the watcher's
+--             auto-build path can know about
+--   excluded  a set of animation names the user unticked
+--   order     animation names in the order the dialog was showing them
+function M.run(entries, cfg, folder, opts)
+  opts = opts or {}
+  local target, excluded = opts.target, opts.excluded
+
   local all = naming.group(entries, config.namingOpts(cfg))
+  if cfg.groupOrder == "listed" then
+    all = M.withOrder(all, opts.order)
+  end
   if #all.groups == 0 then
     app.alert {
       title = "Animation Auto-Tagger",
@@ -350,6 +389,93 @@ function M.run(entries, cfg, folder, target, excluded)
   return true
 end
 
+--- Reorder the tag blocks on `sprite`.
+--
+-- One row per tag, with the arrows that move it. The sprite cannot change
+-- while a modal dialog is up, so the rows can be built to fit it exactly and
+-- the order lives in a plain list the arrows shuffle.
+function M.showReorder(sprite)
+  if not sprite then
+    app.alert { title = "Animation Auto-Tagger", text = "No sprite is open." }
+    return false
+  end
+  local blocked = reorder.conflict(sprite)
+  if blocked then
+    app.alert { title = "Animation Auto-Tagger",
+                text = { "These tags cannot be reordered.", blocked } }
+    return false
+  end
+
+  -- Indices into sprite.tags, in the order the dialog currently shows them.
+  local order = {}
+  for i in ipairs(sprite.tags) do order[i] = i end
+  local rows = #order
+
+  local dlg = Dialog { title = "Reorder Tags" }
+
+  local function rowText(position)
+    local tag = sprite.tags[order[position]]
+    local from = tag.fromFrame.frameNumber
+    local to = tag.toFrame.frameNumber
+    return ("%d.  %s  -  %s")
+      :format(position, tag.name, plural(to - from + 1, "frame"))
+  end
+
+  local function refresh()
+    for i = 1, rows do
+      dlg:modify { id = "row" .. i, text = rowText(i) }
+      dlg:modify { id = "up" .. i, enabled = i > 1 }
+      dlg:modify { id = "down" .. i, enabled = i < rows }
+    end
+  end
+
+  local function swap(a, b)
+    order[a], order[b] = order[b], order[a]
+    refresh()
+  end
+
+  for i = 1, rows do
+    dlg:label { id = "row" .. i, label = "", text = "" }
+    dlg:button { id = "up" .. i, text = "Up", onclick = function()
+      if i > 1 then swap(i, i - 1) end
+    end }
+    dlg:button { id = "down" .. i, text = "Down", onclick = function()
+      if i < rows then swap(i, i + 1) end
+    end }
+    dlg:newrow()
+  end
+
+  dlg:separator {}
+  dlg:label { label = "", text = "frames belonging to no tag are moved to the end" }
+
+  dlg:button {
+    id = "apply", text = "Apply", focus = true,
+    onclick = function()
+      local report, err = reorder.apply(sprite, order)
+      dlg:close()
+      if not report then
+        app.alert { title = "Animation Auto-Tagger", text = { "Nothing was changed.", err } }
+        return
+      end
+      app.refresh()
+      if #report.warnings > 0 then
+        local text = { ("Reordered %s."):format(plural(report.moved, "frame")) }
+        for _, w in ipairs(report.warnings) do text[#text + 1] = w end
+        app.alert { title = "Animation Auto-Tagger", text = text }
+      elseif report.moved == 0 then
+        if app.tip then app.tip("Already in that order") end
+      elseif app.tip then
+        app.tip(("Reordered %s"):format(plural(report.moved, "frame")))
+      end
+    end,
+  }
+  dlg:button { id = "cancel", text = "Cancel" }
+
+  refresh()
+  dlg:show()
+  return true
+end
+
 --- Show the dialog. `opts` may carry:
 --   entries  initial frame list
 --   folder   folder those entries came from
@@ -370,6 +496,7 @@ function M.show(opts)
     -- put against, not the position it happened to be in.
     excluded  = opts.excluded or {},
     rowNames  = {},
+    order     = nil,   -- animation names, once the arrows have been used
   }
 
   -- Taken once, at open time: the dialog is modal, so the set of open sprites
@@ -404,6 +531,9 @@ function M.show(opts)
       collect.completeFromFolder(state.raw, current, namingOpts)
 
     local grouped = naming.group(state.entries, namingOpts)
+    if current.groupOrder == "listed" then
+      grouped = M.withOrder(grouped, state.order)
+    end
     state.cfg, state.grouped = current, grouped
 
     local summary = M.summaryLine(M.withoutExcluded(grouped, state.excluded), current)
@@ -419,6 +549,7 @@ function M.show(opts)
     state.rowNames = {}
 
     local shown = math.min(#grouped.groups, GROUP_ROWS)
+    local arrangeable = current.groupOrder == "listed"
     for i = 1, GROUP_ROWS do
       local g = (i <= shown) and grouped.groups[i] or nil
       state.rowNames[i] = g and g.name or nil
@@ -428,6 +559,13 @@ function M.show(opts)
         visible = g ~= nil,
         selected = g ~= nil and not state.excluded[g.name],
       }
+      -- The arrows only mean anything when the order is the one being
+      -- arranged; under alphabetical or file order they would be undone by
+      -- the next regroup.
+      dlg:modify { id = "up" .. i, visible = g ~= nil,
+                   enabled = arrangeable and g ~= nil and i > 1 }
+      dlg:modify { id = "down" .. i, visible = g ~= nil,
+                   enabled = arrangeable and g ~= nil and i < shown }
     end
     -- Anything past the last row cannot be ticked, so it must not look as
     -- though it were silently dropped.
@@ -452,6 +590,20 @@ function M.show(opts)
   dlg:separator { text = "Frames" }
 
   dlg:label { id = "summary", label = "", text = "" }
+  --- Move the animation on row `i` by one place and rebuild the list.
+  local function moveRow(i, delta)
+    local groups = state.grouped and state.grouped.groups
+    if not groups then return end
+    local j = i + delta
+    if j < 1 or j > #groups then return end
+
+    local names = {}
+    for k, g in ipairs(groups) do names[k] = g.name end
+    names[i], names[j] = names[j], names[i]
+    state.order = names
+    regroup()
+  end
+
   for i = 1, GROUP_ROWS do
     dlg:newrow()
     dlg:check {
@@ -462,6 +614,10 @@ function M.show(opts)
         regroup()
       end,
     }
+    dlg:button { id = "up" .. i, text = "Up", visible = false,
+                 onclick = function() moveRow(i, -1) end }
+    dlg:button { id = "down" .. i, text = "Dn", visible = false,
+                 onclick = function() moveRow(i, 1) end }
   end
   for i = 1, NOTE_ROWS do
     dlg:newrow()
@@ -670,8 +826,11 @@ function M.show(opts)
       current.lastFolder = state.folder or ""
       if opts.onApply then opts.onApply(current) end
       dlg:close()
-      M.run(state.entries, current, state.folder,
-            spriteForLabel(targetChoices, current.targetLabel), state.excluded)
+      M.run(state.entries, current, state.folder, {
+        target = spriteForLabel(targetChoices, current.targetLabel),
+        excluded = state.excluded,
+        order = state.order,
+      })
     end,
   }
   dlg:button { id = "cancel", text = "Cancel" }

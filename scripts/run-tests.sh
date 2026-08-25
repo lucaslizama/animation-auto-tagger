@@ -25,6 +25,9 @@ echo "== builder =="
 echo
 echo "== watcher =="
 "$LUA" tests/test_watcher.lua
+echo
+echo "== reorder =="
+"$LUA" tests/test_reorder.lua
 
 # The suites above use a stand-in API. If a real Aseprite is around, also run
 # the end-to-end check through it - that is what catches things the double

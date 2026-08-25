@@ -67,7 +67,7 @@ aseprite --batch --script <(echo 'for k in pairs(package.loaded) do
   if tostring(k):find("animation%-auto%-tagger") then print(k) end end')
 ```
 
-That should list seven modules. It is `package.loaded`, not the `_LOADED`
+That should list eight modules. It is `package.loaded`, not the `_LOADED`
 global older Lua snippets reach for — Aseprite runs Lua 5.4, which keeps that
 table in the registry instead. Tested against Aseprite 1.3.18.2; it needs
 1.3.15 or newer for `app.tip` and the menu-checkbox support.
@@ -221,6 +221,7 @@ pattern needs either two captures `(animation)(index)` or three
 | Frame duration | Milliseconds per frame (default 100) |
 | Keep source durations | For multi-frame sources, copy their timing instead |
 | Canvas size | Largest source frame, the first one, or a size you type |
+| Tag order | Alphabetical, the order files were read, or arranged by hand |
 | Align smaller frames | center, top-left, top-center, bottom-left, bottom-center — bottom-center is usually right for characters standing on a ground line |
 | Color mode | rgb (default), gray, indexed, or match the first source |
 | Tag direction | forward, reverse, ping-pong, ping-pong-reverse |
@@ -276,6 +277,29 @@ One thing to be careful of: when the import has **fewer** frames than the tag
 held, the surplus frames are deleted outright, and deleting a frame takes every
 layer's cel on it, not just the imported one. That is reported in the result,
 and one undo takes it all back.
+
+### Ordering the animations
+
+**Tag order** can be alphabetical, the order the files were read, or *as
+arranged below*, which turns on the Up and Dn buttons beside each animation.
+The tags are laid down the timeline in whatever order the list ends up in.
+
+For a sprite that already exists there is **File ▸ Scripts ▸ Reorder Tags**. It
+lists the tags with the same arrows and, on Apply, rearranges the timeline so
+the frames actually move to match: every layer, every cel position, every frame
+duration travels with its own tag, and the tags keep their names, directions and
+colours. Aseprite has no command for moving frames, so this works by lifting the
+cels off the timeline and writing them back in the new order, all inside one
+undo step.
+
+Two things it will not do. Tags that share frames have no order to be put in, so
+that is refused with an explanation rather than guessed at. And frames belonging
+to no tag are moved to the end, keeping their own relative order, since there is
+nowhere else for them to go once the blocks around them have moved.
+
+Cels that Aseprite had linked (several frames sharing one image) become separate
+copies when they move. It looks identical and takes a little more room; the
+result says so when it happens.
 
 ### Choosing what gets imported
 
@@ -376,6 +400,7 @@ flattening, and it is the only place the two layouts differ.
 | `src/collect.lua` | Gathering candidate frames from a folder or from open sprites |
 | `src/sources.lua` | Reading source frames — as images where possible, sprites where not |
 | `src/builder.lua` | Assembling the tagged sprite |
+| `src/reorder.lua` | Rearranging the tag blocks on a sprite that already exists |
 | `src/ui.lua` | The main dialog |
 | `src/watcher.lua` | Timer-based drop detection |
 | `src/config.lua` | Defaults and preference persistence |

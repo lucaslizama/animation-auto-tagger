@@ -427,6 +427,73 @@ eq(#selfTarget.frames, 4, "the sprite was left exactly as it was")
 sources.release(pool6, cfg)
 selfTarget:close()
 
+--------------------------------------------------------------------------
+-- Reordering tag blocks on a sprite that already exists. Aseprite has no
+-- command for moving frames, so this lifts every cel off the timeline and
+-- writes it back elsewhere; whether the pixels really follow is not something
+-- a stand-in can answer.
+--------------------------------------------------------------------------
+
+local reorder = require("reorder")
+
+local rs = Sprite(8, 8, ColorMode.RGB)
+for i = 2, 6 do rs:newEmptyFrame(i) end
+local second = rs:newLayer()
+second.name = "second"
+for f = 1, 6 do
+  local a = Image(8, 8, ColorMode.RGB)
+  a:clear(Color { r = f * 10, g = 0, b = 0 })
+  rs:newCel(rs.layers[1], f, a, Point(f, 0))
+  local b = Image(8, 8, ColorMode.RGB)
+  b:clear(Color { r = 0, g = f * 10, b = 0 })
+  rs:newCel(second, f, b, Point(0, f))
+  rs.frames[f].duration = f / 100.0
+end
+local t1 = rs:newTag(1, 2); t1.name = "aa"; t1.aniDir = AniDir.PING_PONG
+local t2 = rs:newTag(3, 4); t2.name = "bb"
+local t3 = rs:newTag(5, 6); t3.name = "cc"
+
+local function rsLayout()
+  local out = {}
+  for _, t in ipairs(rs.tags) do
+    local f, l = tagRange(t)
+    out[#out + 1] = ("%s %d-%d"):format(t.name, f, l)
+  end
+  return table.concat(out, "  ")
+end
+local function redsOf(layer)
+  local out = {}
+  for f = 1, #rs.frames do
+    local cel = layer:cel(f)
+    out[#out + 1] = cel and app.pixelColor.rgbaR(cel.image:getPixel(0, 0)) or -1
+  end
+  return table.concat(out, ",")
+end
+
+eq(rsLayout(), "aa 1-2  bb 3-4  cc 5-6", "reorder: starting layout")
+
+local rep = reorder.apply(rs, { 3, 1, 2 })   -- cc, aa, bb
+eq(rep ~= nil, true, "reorder: applied")
+eq(rsLayout(), "cc 1-2  aa 3-4  bb 5-6", "reorder: tags in the order asked for")
+eq(redsOf(rs.layers[1]), "50,60,10,20,30,40", "reorder: pixels followed their tag")
+eq(app.pixelColor.rgbaG(second:cel(1).image:getPixel(0, 0)), 50,
+   "reorder: the second layer moved too")
+eq(second:cel(1).position.y, 5, "reorder: cel position came along")
+eq(("%.2f"):format(rs.frames[1].duration), "0.05", "reorder: duration came along")
+eq(t1.name .. " " .. tostring(t1.aniDir == AniDir.PING_PONG), "aa true",
+   "reorder: the tag kept its name and direction")
+
+-- Round-tripped, because a reordered timeline has to survive being saved.
+local reorderOut = app.fs.joinPath(app.fs.tempPath, "aat_e2e_reorder.aseprite")
+rs:saveAs(reorderOut)
+rs:close()
+local rsBack = Sprite { fromFile = reorderOut }
+local bf, bl = tagRange(rsBack.tags[1])
+eq(rsBack.tags[1].name .. " " .. bf .. "-" .. bl, "cc 1-2", "reorder: survived a save and reopen")
+eq(app.pixelColor.rgbaR(rsBack.layers[1]:cel(1).image:getPixel(0, 0)), 50,
+   "reorder: and so did the pixels")
+rsBack:close()
+
 print(("\n%d checks, %d failure(s)"):format(checks, failures))
 -- Aseprite's Lua has no os.exit, so the exit code cannot carry the verdict and
 -- a runner reading it would call a failing suite a pass. This line is what the
