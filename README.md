@@ -62,11 +62,13 @@ Restart, then look for **File ▸ Scripts ▸ Animation Auto-Tagger**. Without t
 GUI:
 
 ```sh
-aseprite --batch --script <(echo 'for k in pairs(_LOADED) do
-  if tostring(k):find("animation-auto-tagger") then print(k) end end')
+aseprite --batch --script <(echo 'for k in pairs(package.loaded) do
+  if tostring(k):find("animation%-auto%-tagger") then print(k) end end')
 ```
 
-That should list seven modules. Tested against Aseprite 1.3.18.2; it needs
+That should list seven modules. It is `package.loaded`, not the `_LOADED`
+global older Lua snippets reach for — Aseprite runs Lua 5.4, which keeps that
+table in the registry instead. Tested against Aseprite 1.3.18.2; it needs
 1.3.15 or newer for `app.tip` and the menu-checkbox support.
 
 ## About dragging files in
