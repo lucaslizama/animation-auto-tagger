@@ -94,21 +94,6 @@ jobs:
           chmod +x butler/butler
           butler/butler -V
 
-      # Read-only, and it runs on a manual dispatch as well as a tag, so the
-      # channel can be asked about without publishing anything. Asked with the
-      # same key that does the pushing, which is the only view that counts.
-      - name: Show what itch thinks the channel holds
-        if: always()
-        env:
-          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
-        run: |
-          if [ -z "$BUTLER_API_KEY" ] || [ -z "$ITCH_TARGET" ]; then
-            echo "nothing to ask with"
-            exit 0
-          fi
-          butler/butler status "$ITCH_TARGET" || true
-
       - name: Push to itch.io
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         env:
@@ -129,7 +114,46 @@ jobs:
           esac
 
           version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -1)"
-          butler/butler push \
-            dist/upload \
-            "$ITCH_TARGET" \
-            --userversion "$version"
+
+          # Verbose, so the build id can be picked out of it, but written to a
+          # file rather than the log: the verbose output carries signed upload
+          # URLs for this build's files, which have no business in a public log.
+          if ! butler/butler -v push dist/upload "$ITCH_TARGET" \
+                 --userversion "$version" > push.log 2>&1; then
+            grep -E '^(•|✗|Error)' push.log || tail -5 push.log
+            exit 1
+          fi
+          grep -E '^(•|✓)' push.log || true
+
+          grep -oE 'build/[0-9]+/' push.log | head -1 | tr -dc '0-9' > build-id.txt
+          echo "build id: $(cat build-id.txt)"
+
+      # butler says "should be up in a bit" the moment the upload finishes,
+      # which is not the same as itch having processed it. Until a build
+      # completes there is no channel and nothing to download, so a release
+      # that stopped at the upload looks published when it is not.
+      - name: Confirm itch processed the build
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          id="$(cat build-id.txt)"
+          if [ -z "$id" ]; then
+            echo "::warning::could not tell which build was created, so it was not checked"
+            exit 0
+          fi
+
+          for attempt in $(seq 1 18); do
+            state="$(curl -sS -H "Authorization: $BUTLER_API_KEY" \
+                      "https://api.itch.io/wharf/builds/$id" \
+                     | python3 -c 'import json,sys; print(json.load(sys.stdin)["build"]["state"])')"
+            echo "build $id: $state"
+            case "$state" in
+              completed) echo "the upload is live"; exit 0 ;;
+              failed)    echo "::error::itch failed to process build $id"; exit 1 ;;
+            esac
+            sleep 10
+          done
+
+          echo "::warning::build $id is still $state at itch after three minutes. \
+          The upload is not downloadable until itch processes it; this is on their side."

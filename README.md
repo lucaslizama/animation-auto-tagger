@@ -423,7 +423,14 @@ channel half decides the platform tags: butler reads `win`, `linux`, `mac` and
 names are kebab-case by convention.
 
 Both are checked before butler runs, so a missing one fails with a sentence
-rather than an authentication error from inside butler. The workflow also
+rather than an authentication error from inside butler.
+
+It also waits for itch to process the build rather than trusting butler's
+"should be up in a bit", which it says the moment the upload finishes. Until a
+build completes there is no channel and nothing to download, so a run that
+stopped at the upload would otherwise look like a published release. A build
+that itch rejects fails the run; one still queued after three minutes leaves a
+warning, since a queue on their side is not a broken release. The workflow also
 refuses a tag whose name disagrees with the version in `package.json`, the same
 check `scripts/release.sh` makes locally, and it keeps the built package with
 the run so a failed publish still leaves the exact file to look at.
