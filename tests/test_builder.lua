@@ -580,6 +580,44 @@ suite("build: a folded sequence is not counted again from the folder", function(
   eq(cached, 0, "and none of them were even read")
 end)
 
+suite("select: unticked animations are left out of the build", function()
+  local ui = require("ui")
+  local entries = withFiles {
+    { "hero_run_00" }, { "hero_run_01" },
+    { "hero_idle_00" },
+    { "hero_jump_00" },
+  }
+  local cfg = config.new()
+  local grouped = naming.group(entries, config.namingOpts(cfg))
+  eq(#grouped.groups, 3, "three animations found")
+
+  eq(ui.selectedGroups(grouped, {}), 3, "nothing unticked means all of them")
+  eq(ui.selectedGroups(grouped, { idle = true }), 2, "unticking one drops it")
+  eq(ui.selectedGroups(grouped, { idle = true, jump = true, run = true }), 0,
+     "unticking everything leaves nothing")
+
+  local kept = ui.withoutExcluded(grouped, { idle = true })
+  local names = {}
+  for _, g in ipairs(kept.groups) do names[#names + 1] = g.name end
+  eq(table.concat(names, ","), "jump,run", "and the rest keep their order")
+  eq(#grouped.groups, 3, "the original grouping is not modified")
+end)
+
+suite("select: a build skips the animations that were unticked", function()
+  local entries = withFiles {
+    { "hero_run_00" }, { "hero_run_01" },
+    { "hero_idle_00" },
+  }
+  local ui = require("ui")
+  local cfg = config.new()
+  local grouped = ui.withoutExcluded(naming.group(entries, config.namingOpts(cfg)),
+                                     { idle = true })
+  local reports = builder.buildAll(grouped, cfg, { pool = sources.newPool(), folder = "/art" })
+  eq(reports[1].frames, 2, "only run's two frames were built")
+  eq(#reports[1].tags, 1, "one tag")
+  eq(reports[1].tags[1].name, "run", "and it is the one that stayed ticked")
+end)
+
 suite("collect: only image files in the folder become entries", function()
   fake.reset()
   fake.dirs["/art"] = { "hero_run_00.png", "hero_run_01.png", "notes.txt", "sheet.aseprite" }

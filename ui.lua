@@ -13,6 +13,15 @@ local builder = require("builder")
 local M = {}
 
 local PREVIEW_ROWS = 14
+local NOTE_ROWS = 4
+-- Widgets cannot be added once a dialog is built, and the naming options can
+-- turn one animation into several, so the tickable rows are sized with enough
+-- headroom that the cap is never what someone runs into. Hidden rows take no
+-- space, so being generous costs nothing.
+local MIN_GROUP_ROWS = 32
+local function groupRowsFor(count)
+  return math.max(MIN_GROUP_ROWS, count * 2)
+end
 
 -- { label shown in the combobox, value stored in the config }
 local ANIM_MODES = {
@@ -83,12 +92,19 @@ local function groupFrames(group, cfg)
 end
 
 --- Human-readable preview of what would be built.
-function M.previewLines(grouped, cfg)
+--- One line per animation, in the order they will be tagged.
+function M.groupLines(grouped, cfg)
   local lines = {}
   for _, g in ipairs(grouped.groups) do
     lines[#lines + 1] = ("%s  -  %s%s")
       :format(g.name, plural(groupFrames(g, cfg), "frame"), indexRange(g.items))
   end
+  return lines
+end
+
+--- Everything the grouping wants to say that is not an animation.
+function M.noteLines(grouped)
+  local lines = {}
   for i, u in ipairs(grouped.unmatched) do
     if i > 4 then
       lines[#lines + 1] = ("(+%d more ignored)"):format(#grouped.unmatched - 4)
@@ -101,6 +117,40 @@ function M.previewLines(grouped, cfg)
     lines[#lines + 1] = "warning: " .. w
   end
   return lines
+end
+
+function M.previewLines(grouped, cfg)
+  local lines = M.groupLines(grouped, cfg)
+  for i, u in ipairs(grouped.unmatched) do
+    if i > 4 then
+      lines[#lines + 1] = ("(+%d more ignored)"):format(#grouped.unmatched - 4)
+      break
+    end
+    lines[#lines + 1] = ("ignored: %s  -  %s"):format(u.entry.title, u.reason)
+  end
+  for i, w in ipairs(grouped.warnings) do
+    if i > 3 then break end
+    lines[#lines + 1] = "warning: " .. w
+  end
+  return lines
+end
+
+--- A copy of `grouped` with the unticked animations left out.
+function M.withoutExcluded(grouped, excluded)
+  if not excluded or next(excluded) == nil then return grouped end
+  local kept = {}
+  for _, g in ipairs(grouped.groups) do
+    if not excluded[g.name] then kept[#kept + 1] = g end
+  end
+  local copy = {}
+  for k, v in pairs(grouped) do copy[k] = v end
+  copy.groups = kept
+  return copy
+end
+
+--- How many animations are still ticked.
+function M.selectedGroups(grouped, excluded)
+  return #M.withoutExcluded(grouped, excluded).groups
 end
 
 --- Total frames a grouping will really produce.
@@ -183,14 +233,24 @@ end
 -- Returns true when at least one sprite was produced. `target` is the sprite
 -- to append to; without one, an appending build falls back to the active
 -- sprite, which is all the watcher's auto-build path can know about.
-function M.run(entries, cfg, folder, target)
-  local grouped = naming.group(entries, config.namingOpts(cfg))
-  if #grouped.groups == 0 then
+-- `excluded` is a set of tag names the user unticked in the dialog.
+function M.run(entries, cfg, folder, target, excluded)
+  local all = naming.group(entries, config.namingOpts(cfg))
+  if #all.groups == 0 then
     app.alert {
       title = "Animation Auto-Tagger",
       text = { "None of these files match the naming pattern.",
                "Expected something like  name" .. cfg.separator .. "animation"
                  .. cfg.separator .. "00" },
+    }
+    return false
+  end
+
+  local grouped = M.withoutExcluded(all, excluded)
+  if #grouped.groups == 0 then
+    app.alert {
+      title = "Animation Auto-Tagger",
+      text = "Every animation is unticked, so there is nothing to build.",
     }
     return false
   end
@@ -294,6 +354,7 @@ end
 --   entries  initial frame list
 --   folder   folder those entries came from
 --   cfg      starting configuration
+--   excluded tag names already unticked elsewhere, e.g. on the drop prompt
 --   onApply  called with the config the user built with (for persistence)
 --   title    dialog title
 function M.show(opts)
@@ -304,6 +365,11 @@ function M.show(opts)
     entries   = opts.entries or {},
     recovered = 0,
     folder    = opts.folder or collect.commonFolder(opts.entries or {}),
+    -- Keyed by tag name rather than by row: the rows are relabelled every time
+    -- the naming options change, and a tick has to follow the animation it was
+    -- put against, not the position it happened to be in.
+    excluded  = opts.excluded or {},
+    rowNames  = {},
   }
 
   -- Taken once, at open time: the dialog is modal, so the set of open sprites
@@ -322,6 +388,10 @@ function M.show(opts)
     activeLabel = targetLabels[1]
   end
 
+  -- Sized once from the grouping the dialog opens with.
+  local GROUP_ROWS = groupRowsFor(
+    #naming.group(state.entries, config.namingOpts(cfg)).groups)
+
   local dlg = Dialog { title = opts.title or "Build Tagged Animation" }
 
   local function regroup()
@@ -336,7 +406,7 @@ function M.show(opts)
     local grouped = naming.group(state.entries, namingOpts)
     state.cfg, state.grouped = current, grouped
 
-    local summary = M.summaryLine(grouped, current)
+    local summary = M.summaryLine(M.withoutExcluded(grouped, state.excluded), current)
     if state.recovered > 0 then
       summary = summary .. (" (%d recovered from the folder)"):format(state.recovered)
     end
@@ -344,17 +414,36 @@ function M.show(opts)
       and "No files selected yet."
       or summary }
 
-    local lines = M.previewLines(grouped, current)
-    for i = 1, PREVIEW_ROWS do
-      if i == PREVIEW_ROWS and #lines > PREVIEW_ROWS then
-        dlg:modify { id = "row" .. i, text = ("(+%d more)"):format(#lines - PREVIEW_ROWS + 1),
-                     visible = true }
+    local groupLines = M.groupLines(grouped, current)
+    local notes = M.noteLines(grouped)
+    state.rowNames = {}
+
+    local shown = math.min(#grouped.groups, GROUP_ROWS)
+    for i = 1, GROUP_ROWS do
+      local g = (i <= shown) and grouped.groups[i] or nil
+      state.rowNames[i] = g and g.name or nil
+      dlg:modify {
+        id = "grp" .. i,
+        text = g and groupLines[i] or "",
+        visible = g ~= nil,
+        selected = g ~= nil and not state.excluded[g.name],
+      }
+    end
+    -- Anything past the last row cannot be ticked, so it must not look as
+    -- though it were silently dropped.
+    if #grouped.groups > GROUP_ROWS then
+      table.insert(notes, 1,
+        ("(+%d more animations, all included)"):format(#grouped.groups - GROUP_ROWS))
+    end
+    for i = 1, NOTE_ROWS do
+      if i == NOTE_ROWS and #notes > NOTE_ROWS then
+        dlg:modify { id = "note" .. i, text = ("(+%d more)"):format(#notes - NOTE_ROWS + 1) }
       else
-        dlg:modify { id = "row" .. i, text = lines[i] or "", visible = lines[i] ~= nil }
+        dlg:modify { id = "note" .. i, text = notes[i] or "" }
       end
     end
 
-    dlg:modify { id = "build", enabled = #grouped.groups > 0 }
+    dlg:modify { id = "build", enabled = M.selectedGroups(grouped, state.excluded) > 0 }
     dlg:modify { id = "splitByBase", enabled = #grouped.bases > 1 }
   end
 
@@ -363,9 +452,20 @@ function M.show(opts)
   dlg:separator { text = "Frames" }
 
   dlg:label { id = "summary", label = "", text = "" }
-  for i = 1, PREVIEW_ROWS do
+  for i = 1, GROUP_ROWS do
     dlg:newrow()
-    dlg:label { id = "row" .. i, label = "", text = "" }
+    dlg:check {
+      id = "grp" .. i, label = "", text = "", selected = true, visible = false,
+      onclick = function()
+        local name = state.rowNames[i]
+        if name then state.excluded[name] = not dlg.data["grp" .. i] end
+        regroup()
+      end,
+    }
+  end
+  for i = 1, NOTE_ROWS do
+    dlg:newrow()
+    dlg:label { id = "note" .. i, label = "", text = "" }
   end
 
   dlg:newrow()
@@ -571,7 +671,7 @@ function M.show(opts)
       if opts.onApply then opts.onApply(current) end
       dlg:close()
       M.run(state.entries, current, state.folder,
-            spriteForLabel(targetChoices, current.targetLabel))
+            spriteForLabel(targetChoices, current.targetLabel), state.excluded)
     end,
   }
   dlg:button { id = "cancel", text = "Cancel" }

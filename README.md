@@ -276,6 +276,24 @@ held, the surplus frames are deleted outright, and deleting a frame takes every
 layer's cel on it, not just the imported one. That is reported in the result,
 and one undo takes it all back.
 
+### Choosing what gets imported
+
+Each detected animation gets a checkbox. Unticking one leaves it out of the
+build entirely — useful when a folder holds a whole character but only the walk
+cycle changed. The summary counts what is actually ticked, and Build greys out
+when nothing is.
+
+They appear in both places you can build from: the prompt that comes up after a
+drop, and the full dialog behind **Options**. Ticks made on the prompt are
+carried across if you open Options from it, so nothing quietly resets.
+
+The prompt is built fresh for each drop and has exactly one row per animation.
+The full dialog cannot grow after it opens — Aseprite has no way to add a widget
+to a dialog already on screen — so its rows are sized with headroom when it
+opens. In the unlikely event that changing the naming options produces more
+animations than there are rows, the surplus is listed as included rather than
+being dropped quietly.
+
 ### Other things worth knowing
 
 A sprite cannot be appended to itself — if the

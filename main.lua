@@ -22,13 +22,14 @@ local function saveConfig(cfg)
   config.save(state.plugin, cfg)
 end
 
-local function openDialog(entries, folder, title)
+local function openDialog(entries, folder, title, excluded)
   ui.show {
-    entries = entries,
-    folder  = folder,
-    cfg     = state.cfg,
-    title   = title,
-    onApply = saveConfig,
+    entries  = entries,
+    folder   = folder,
+    cfg      = state.cfg,
+    title    = title,
+    excluded = excluded,
+    onApply  = saveConfig,
   }
 end
 
@@ -60,14 +61,7 @@ local function onBatch(sprites)
     return
   end
 
-  local text = { ui.summaryLine(grouped, cfg) .. " ready to build:" }
-  for i, line in ipairs(ui.previewLines(grouped, cfg)) do
-    if i > 8 then
-      text[#text + 1] = "..."
-      break
-    end
-    text[#text + 1] = line
-  end
+  local text = {}
   if recovered > 0 then
     text[#text + 1] = ""
     text[#text + 1] = ("%d file%s arrived in the drop; %d more came from the same")
@@ -88,6 +82,23 @@ local function onBatch(sprites)
       if state.watch then state.watch:release() end
     end,
   }
+  -- Built fresh for every drop, so there can be exactly one checkbox per
+  -- animation -- no fixed row count to run out of.
+  local excluded = {}
+  prompt:label { label = "", text = ui.summaryLine(grouped, cfg) .. " ready to build:" }
+  prompt:newrow()
+  for i, line in ipairs(ui.groupLines(grouped, cfg)) do
+    local name = grouped.groups[i].name
+    prompt:check {
+      id = "grp" .. i, label = "", text = line, selected = true,
+      onclick = function() excluded[name] = not prompt.data["grp" .. i] end,
+    }
+    prompt:newrow()
+  end
+  for _, line in ipairs(ui.noteLines(grouped)) do
+    prompt:label { label = "", text = line }
+    prompt:newrow()
+  end
   for _, line in ipairs(text) do
     prompt:label { label = "", text = line }
     prompt:newrow()
@@ -98,14 +109,16 @@ local function onBatch(sprites)
   prompt:button {
     text = "Build", focus = true,
     onclick = function()
-      ui.run(entries, cfg, folder)
+      ui.run(entries, cfg, folder, nil, excluded)
       prompt:close()
     end,
   }
   prompt:button {
     text = "Options...",
     onclick = function()
-      openDialog(entries, folder, "Build Tagged Animation")
+      -- Carried across so ticking here and then opening Options does not
+      -- quietly put everything back.
+      openDialog(entries, folder, "Build Tagged Animation", excluded)
       prompt:close()
     end,
   }
