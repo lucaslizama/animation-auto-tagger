@@ -82,6 +82,17 @@ way to do this short of dragging frame ranges around by hand. Tags that share
 frames are refused rather than guessed at, and it is one undo step like
 everything else.
 
+### Getting at it quickly
+
+The commands live under File ▸ Scripts ▸ Animation Auto-Tagger. The ones worth
+reaching fast have a second home too: building appears in the File menu beside
+Import, and reordering appears on the right-click menu of a tag in the timeline,
+where your hand already is when the order is what you are thinking about.
+
+For anything used daily, bind a key: Edit ▸ Keyboard Shortcuts, search for the
+command by name. Aseprite does not let an extension ship a default shortcut, so
+this is the one part you have to set up yourself.
+
 ### Three ways in
 
 Point it at a folder. Or read the sprites already open. Or just drag frames onto

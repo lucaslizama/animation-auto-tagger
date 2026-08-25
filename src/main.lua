@@ -297,41 +297,79 @@ function init(plugin)
     group = "file_scripts",
   }
 
+  -- The same three actions appear in more than one place, so each is written
+  -- once here and registered as many times as it has homes. Aseprite does not
+  -- validate a menu group id: a wrong one is accepted and the command simply
+  -- never appears, so nothing is moved out of this plugin's own submenu. The
+  -- extra entries are shortcuts to it, not replacements for it.
+  local function tagOpenSprites()
+    if state.broken then return reportBroken() end
+    local entries = collect.fromSprites(app.sprites)
+    openDialog(entries, collect.commonFolder(entries), "Tag Open Sprites")
+  end
+
+  local function tagFolder()
+    if state.broken then return reportBroken() end
+    local entries = {}
+    local folder = state.cfg.lastFolder
+    if folder ~= "" and app.fs.isDirectory(folder) then
+      entries = collect.fromFolder(folder)
+    end
+    openDialog(entries, folder, "Tag Frames in a Folder")
+  end
+
+  local function reorderTags()
+    if state.broken then return reportBroken() end
+    ui.showReorder(app.sprite)
+  end
+
+  local function haveTags() return app.sprite ~= nil and #app.sprite.tags > 1 end
+
   plugin:newCommand {
     id = "AnimAutoTagFromOpen",
     title = "Tag Open Sprites...",
     group = "anim_auto_tagger",
-    onclick = function()
-      if state.broken then return reportBroken() end
-      local entries = collect.fromSprites(app.sprites)
-      openDialog(entries, collect.commonFolder(entries), "Tag Open Sprites")
-    end,
+    onclick = tagOpenSprites,
   }
 
   plugin:newCommand {
     id = "AnimAutoTagFromFolder",
     title = "Tag Frames in a Folder...",
     group = "anim_auto_tagger",
-    onclick = function()
-      if state.broken then return reportBroken() end
-      local entries = {}
-      local folder = state.cfg.lastFolder
-      if folder ~= "" and app.fs.isDirectory(folder) then
-        entries = collect.fromFolder(folder)
-      end
-      openDialog(entries, folder, "Tag Frames in a Folder")
-    end,
+    onclick = tagFolder,
   }
 
   plugin:newCommand {
     id = "AnimAutoTagReorder",
     title = "Reorder Tags...",
     group = "anim_auto_tagger",
-    onenabled = function() return app.sprite ~= nil and #app.sprite.tags > 1 end,
-    onclick = function()
-      if state.broken then return reportBroken() end
-      ui.showReorder(app.sprite)
-    end,
+    onenabled = haveTags,
+    onclick = reorderTags,
+  }
+
+  -- Beside Import in the File menu, two clicks instead of four.
+  plugin:newCommand {
+    id = "AnimAutoTagFolderInFileMenu",
+    title = "Tag Frames in a Folder...",
+    group = "file_import",
+    onclick = tagFolder,
+  }
+
+  plugin:newCommand {
+    id = "AnimAutoTagOpenInFileMenu",
+    title = "Tag Open Sprites...",
+    group = "file_import",
+    onclick = tagOpenSprites,
+  }
+
+  -- Right-clicking a tag in the timeline, which is where the hand already is
+  -- when the order of the tags is the thing being thought about.
+  plugin:newCommand {
+    id = "AnimAutoTagReorderInTagMenu",
+    title = "Reorder Tags...",
+    group = "tag_popup_properties",
+    onenabled = haveTags,
+    onclick = reorderTags,
   }
 
   plugin:newMenuSeparator { group = "anim_auto_tagger" }

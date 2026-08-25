@@ -126,6 +126,25 @@ One file in, twenty frames and five tags out. The test suite checks that too.
 Watching is still off by default; the two menu commands below need none of this
 machinery.
 
+## Where the commands live
+
+Everything is under **File ▸ Scripts ▸ Animation Auto-Tagger**, and the ones
+worth reaching quickly have a second home:
+
+| | |
+| --- | --- |
+| Tag Frames in a Folder, Tag Open Sprites | also in the **File** menu, beside Import |
+| Reorder Tags | also on the **right-click menu of a tag** in the timeline |
+
+Nothing was moved out of the plugin's own submenu. Aseprite accepts a menu group
+id without checking it exists, so a command placed in a group that will not take
+it does not appear anywhere at all; the extra entries are additions rather than
+replacements, which means a group that turns out not to work costs nothing.
+
+For anything used daily, a key is faster than either. Aseprite will not let an
+extension ship a default one, so assign your own: **Edit ▸ Keyboard Shortcuts**,
+search for the command by name, and bind it.
+
 ## Using it
 
 **File ▸ Scripts ▸ Animation Auto-Tagger ▸ Tag Open Sprites…**
