@@ -77,9 +77,12 @@ Tags come out alphabetically by default, or in the order the files were read.
 
 Rearranging them afterwards is a separate command rather than part of building,
 since the two are separate decisions: what to bring in, and what order it should
-end up in. It works on any sprite with more than one tag, lists them with Up and
-Down buttons, and on applying it rearranges the timeline so the frames really
-move: every layer, every cel
+end up in. It works on any sprite with more than one tag and is also on the
+right-click menu of a tag in the timeline. Each row can be moved a place at a
+time or sent straight to the top or bottom, and a Sort button takes the whole
+list at once: by name either way, longest or shortest animation first, or back to
+the order the timeline has now. On applying, it rearranges the timeline so the
+frames really move: every layer, every cel
 position, every frame duration travels with its own tag, and the tags keep their
 names, directions and colours. Aseprite has no command for moving frames, so
 this works by lifting the cels off the timeline and writing them back in the new

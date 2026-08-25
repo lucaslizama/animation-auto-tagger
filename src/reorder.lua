@@ -88,6 +88,60 @@ function M.sequence(sprite, order)
   return seq, blocks, loose
 end
 
+--- Take the entry at `from` out of `order` and put it back at `to`.
+--
+-- Returns a new list; the one passed in is left alone.
+function M.moveTo(order, from, to)
+  local out = {}
+  for i, v in ipairs(order) do out[i] = v end
+  if from < 1 or from > #out then return out end
+  if to < 1 then to = 1 end
+  if to > #out then to = #out end
+  if from == to then return out end
+  table.insert(out, to, table.remove(out, from))
+  return out
+end
+
+M.SORTS = { "name-asc", "name-desc", "frames-desc", "frames-asc", "timeline" }
+
+--- `order` sorted by `how`, one of M.SORTS.
+--
+-- Ties keep the order they already had, so sorting twice by the same thing
+-- cannot shuffle equal rows about.
+function M.sortOrder(sprite, order, how)
+  local about = {}
+  for position, index in ipairs(order) do
+    local tag = sprite.tags[index]
+    about[index] = {
+      name = tag.name,
+      frames = tag.toFrame.frameNumber - tag.fromFrame.frameNumber + 1,
+      from = tag.fromFrame.frameNumber,
+      was = position,
+    }
+  end
+
+  local out = {}
+  for i, v in ipairs(order) do out[i] = v end
+
+  local function firstKey(t)
+    if how == "name-asc" or how == "name-desc" then return t.name end
+    if how == "frames-asc" or how == "frames-desc" then return t.frames end
+    return t.from
+  end
+  local descending = (how == "name-desc" or how == "frames-desc")
+
+  table.sort(out, function(a, b)
+    local x, y = about[a], about[b]
+    local ka, kb = firstKey(x), firstKey(y)
+    if ka ~= kb then
+      if descending then return ka > kb end
+      return ka < kb
+    end
+    return x.was < y.was
+  end)
+  return out
+end
+
 --- Lift every cel off the timeline, so the frames can be written back in any
 -- order without a half-moved frame being read as a source.
 local function snapshot(sprite)

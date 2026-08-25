@@ -41,6 +41,17 @@ local EXISTING_TAGS = {
   { "add alongside",   "append" },
   { "replace matching", "replace" },
 }
+-- { label shown in the combobox, how it sorts }
+local TAG_SORTS = {
+  { "name, A to Z",      "name-asc" },
+  { "name, Z to A",      "name-desc" },
+  { "longest first",     "frames-desc" },
+  { "shortest first",    "frames-asc" },
+  { "timeline order",    "timeline" },
+}
+-- Exposed so a test can check every criterion offered here is one the reorder
+-- module actually knows. A value that drifted would silently fall through to
+-- timeline order, which looks like the button doing nothing much.
 local CANVAS_MODES = {
   { "largest source frame", "max" },
   { "first source frame",   "first" },
@@ -96,6 +107,11 @@ local function groupFrames(group, cfg)
 end
 
 --- Human-readable preview of what would be built.
+-- Exposed so a test can check that every criterion the dialog offers is one the
+-- reorder module knows. A value that drifted would fall through to timeline
+-- order silently, which reads as the button not doing much.
+M.TAG_SORTS = TAG_SORTS
+
 --- One line per animation, in the order they will be tagged.
 function M.groupLines(grouped, cfg)
   local lines = {}
@@ -393,28 +409,42 @@ function M.showReorder(sprite)
   local function refresh()
     for i = 1, rows do
       dlg:modify { id = "row" .. i, text = rowText(i) }
+      dlg:modify { id = "top" .. i, enabled = i > 1 }
       dlg:modify { id = "up" .. i, enabled = i > 1 }
       dlg:modify { id = "down" .. i, enabled = i < rows }
+      dlg:modify { id = "bot" .. i, enabled = i < rows }
     end
   end
 
-  local function swap(a, b)
-    order[a], order[b] = order[b], order[a]
+  local function moveTo(from, to)
+    order = reorder.moveTo(order, from, to)
+    refresh()
+  end
+
+  local function sortBy(how)
+    order = reorder.sortOrder(sprite, order, how)
     refresh()
   end
 
   for i = 1, rows do
     dlg:label { id = "row" .. i, label = "", text = "" }
-    dlg:button { id = "up" .. i, text = "Up", onclick = function()
-      if i > 1 then swap(i, i - 1) end
-    end }
-    dlg:button { id = "down" .. i, text = "Down", onclick = function()
-      if i < rows then swap(i, i + 1) end
-    end }
+    dlg:button { id = "top" .. i, text = "Top", onclick = function() moveTo(i, 1) end }
+    dlg:button { id = "up" .. i, text = "Up", onclick = function() moveTo(i, i - 1) end }
+    dlg:button { id = "down" .. i, text = "Dn", onclick = function() moveTo(i, i + 1) end }
+    dlg:button { id = "bot" .. i, text = "Btm", onclick = function() moveTo(i, rows) end }
     dlg:newrow()
   end
 
   dlg:separator {}
+  dlg:combobox {
+    id = "sortBy", label = "Sort by",
+    option = TAG_SORTS[1][1], options = labelsOf(TAG_SORTS),
+  }
+  dlg:button {
+    id = "sort", text = "Sort",
+    onclick = function() sortBy(valueFor(TAG_SORTS, dlg.data.sortBy)) end,
+  }
+  dlg:newrow()
   dlg:label { label = "", text = "frames belonging to no tag are moved to the end" }
 
   dlg:button {

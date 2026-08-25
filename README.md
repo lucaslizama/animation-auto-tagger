@@ -311,8 +311,14 @@ command rather than something the build dialog does, because the two are
 separate decisions: what to bring in, and what order it should end up in.
 
 **File ▸ Scripts ▸ Reorder Tags** does the rearranging, on any sprite that has
-more than one tag. It lists them with Up and Down buttons and, on Apply,
-rearranges the timeline so the frames actually move to match: every layer, every cel position, every frame
+more than one tag, and it is also on the right-click menu of a tag in the
+timeline. Each row has **Top**, **Up**, **Dn** and **Btm**, and a **Sort**
+button takes the whole list in one go: by name either way, longest or shortest
+animation first, or back to the order the timeline has now. Sorting is stable,
+so tags of equal length keep the order they were already in and pressing Sort
+twice changes nothing.
+
+On Apply it rearranges the timeline so the frames actually move to match: every layer, every cel position, every frame
 duration travels with its own tag, and the tags keep their names, directions and
 colours. Aseprite has no command for moving frames, so this works by lifting the
 cels off the timeline and writing them back in the new order, all inside one

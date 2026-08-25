@@ -194,6 +194,79 @@ suite("reorder: the sequence is worked out before anything moves", function()
      "and asking did not move anything")
 end)
 
+suite("move: an entry can be taken out and put back anywhere", function()
+  local start = { 1, 2, 3, 4, 5 }
+  eq(table.concat(reorder.moveTo(start, 4, 1), ","), "4,1,2,3,5", "to the top")
+  eq(table.concat(reorder.moveTo(start, 2, 5), ","), "1,3,4,5,2", "to the bottom")
+  eq(table.concat(reorder.moveTo(start, 3, 2), ","), "1,3,2,4,5", "one place up")
+  eq(table.concat(reorder.moveTo(start, 3, 4), ","), "1,2,4,3,5", "one place down")
+  eq(table.concat(reorder.moveTo(start, 1, 1), ","), "1,2,3,4,5", "nowhere is a no-op")
+  eq(table.concat(reorder.moveTo(start, 2, 99), ","), "1,3,4,5,2", "past the end clamps")
+  eq(table.concat(reorder.moveTo(start, 4, -3), ","), "4,1,2,3,5", "before the start clamps")
+  eq(table.concat(start, ","), "1,2,3,4,5", "and the list given is left alone")
+end)
+
+suite("sort: by name, by length, and back to the timeline", function()
+  -- deliberately not in name order, and with two tags the same length
+  local s = spriteWith(12, {
+    { "run",  1, 6 },   -- 6 frames
+    { "idle", 7, 8 },   -- 2
+    { "jump", 9, 10 },  -- 2
+    { "hurt", 11, 12 }, -- 2
+  })
+  local function names(order)
+    local out = {}
+    for _, i in ipairs(order) do out[#out + 1] = s.tags[i].name end
+    return table.concat(out, ",")
+  end
+  local start = { 1, 2, 3, 4 }
+
+  eq(names(reorder.sortOrder(s, start, "name-asc")), "hurt,idle,jump,run", "A to Z")
+  eq(names(reorder.sortOrder(s, start, "name-desc")), "run,jump,idle,hurt", "Z to A")
+  eq(names(reorder.sortOrder(s, start, "frames-desc")), "run,idle,jump,hurt", "longest first")
+  eq(names(reorder.sortOrder(s, start, "frames-asc")), "idle,jump,hurt,run", "shortest first")
+  eq(names(reorder.sortOrder(s, start, "timeline")), "run,idle,jump,hurt", "timeline order")
+  eq(names(start), "run,idle,jump,hurt", "the order given is left alone")
+end)
+
+suite("sort: equal rows keep the order they were already in", function()
+  local s = spriteWith(9, {
+    { "aa", 1, 3 }, { "bb", 4, 6 }, { "cc", 7, 9 },   -- all 3 frames
+  })
+  local function names(order)
+    local out = {}
+    for _, i in ipairs(order) do out[#out + 1] = s.tags[i].name end
+    return table.concat(out, ",")
+  end
+  -- shuffled by hand, then sorted by something they all share
+  local shuffled = { 3, 1, 2 }
+  eq(names(reorder.sortOrder(s, shuffled, "frames-asc")), "cc,aa,bb",
+     "a tie leaves them as they were")
+  -- and sorting again changes nothing, which is what makes the button safe to
+  -- press twice
+  local once = reorder.sortOrder(s, shuffled, "frames-asc")
+  eq(names(reorder.sortOrder(s, once, "frames-asc")), "cc,aa,bb", "sorting twice is stable")
+end)
+
+suite("sort: every criterion the dialog offers is one the module knows", function()
+  local s = spriteWith(4, { { "aa", 1, 2 }, { "bb", 3, 4 } })
+  for _, how in ipairs(reorder.SORTS) do
+    local out = reorder.sortOrder(s, { 1, 2 }, how)
+    eq(#out, 2, how .. " returns every tag")
+  end
+
+  -- The dialog's list and the module's have to agree, or a criterion falls
+  -- through to timeline order without saying so.
+  local known = {}
+  for _, how in ipairs(reorder.SORTS) do known[how] = true end
+  local ui = require("ui")
+  eq(#ui.TAG_SORTS, #reorder.SORTS, "the dialog offers as many as the module knows")
+  for _, pair in ipairs(ui.TAG_SORTS) do
+    eq(known[pair[2]] == true, true, ("the dialog's %q is a criterion the module knows")
+      :format(pair[2]))
+  end
+end)
+
 --------------------------------------------------------------------- run
 
 for _, s in ipairs(suites) do
