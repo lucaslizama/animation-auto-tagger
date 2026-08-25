@@ -30,10 +30,12 @@ local ANIM_MODES = {
   { "animation is the last token",   "last" },
   { "whole name is the animation",   "whole" },
 }
+-- Reordering lives in its own command rather than here. Arrows beside every
+-- row meant controls that did nothing until an unrelated dropdown was changed,
+-- and a build dialog is already dense enough.
 local GROUP_ORDERS = {
-  { "alphabetical",     "alphabetical" },
-  { "file order",       "first-seen" },
-  { "as arranged below", "listed" },
+  { "alphabetical", "alphabetical" },
+  { "file order",   "first-seen" },
 }
 local EXISTING_TAGS = {
   { "add alongside",   "append" },
@@ -150,35 +152,6 @@ function M.withoutExcluded(grouped, excluded)
   return copy
 end
 
---- A copy of `grouped` with its animations put in `names` order.
---
--- Anything not named keeps its relative place at the end, so an order that
--- went stale when the naming options changed degrades rather than losing
--- animations.
-function M.withOrder(grouped, names)
-  if not names or #names == 0 then return grouped end
-  local rank = {}
-  for i, name in ipairs(names) do
-    if rank[name] == nil then rank[name] = i end
-  end
-
-  local ordered = {}
-  for i, g in ipairs(grouped.groups) do
-    ordered[#ordered + 1] = { group = g, rank = rank[g.name] or (#names + i), seen = i }
-  end
-  table.sort(ordered, function(a, b)
-    if a.rank ~= b.rank then return a.rank < b.rank end
-    return a.seen < b.seen
-  end)
-
-  local groups = {}
-  for i, entry in ipairs(ordered) do groups[i] = entry.group end
-  local copy = {}
-  for k, v in pairs(grouped) do copy[k] = v end
-  copy.groups = groups
-  return copy
-end
-
 --- How many animations are still ticked.
 function M.selectedGroups(grouped, excluded)
   return #M.withoutExcluded(grouped, excluded).groups
@@ -266,15 +239,11 @@ end
 --             back to the active sprite, which is all the watcher's
 --             auto-build path can know about
 --   excluded  a set of animation names the user unticked
---   order     animation names in the order the dialog was showing them
 function M.run(entries, cfg, folder, opts)
   opts = opts or {}
   local target, excluded = opts.target, opts.excluded
 
   local all = naming.group(entries, config.namingOpts(cfg))
-  if cfg.groupOrder == "listed" then
-    all = M.withOrder(all, opts.order)
-  end
   if #all.groups == 0 then
     app.alert {
       title = "Animation Auto-Tagger",
@@ -496,7 +465,6 @@ function M.show(opts)
     -- put against, not the position it happened to be in.
     excluded  = opts.excluded or {},
     rowNames  = {},
-    order     = nil,   -- animation names, once the arrows have been used
   }
 
   -- Taken once, at open time: the dialog is modal, so the set of open sprites
@@ -531,9 +499,6 @@ function M.show(opts)
       collect.completeFromFolder(state.raw, current, namingOpts)
 
     local grouped = naming.group(state.entries, namingOpts)
-    if current.groupOrder == "listed" then
-      grouped = M.withOrder(grouped, state.order)
-    end
     state.cfg, state.grouped = current, grouped
 
     local summary = M.summaryLine(M.withoutExcluded(grouped, state.excluded), current)
@@ -549,7 +514,6 @@ function M.show(opts)
     state.rowNames = {}
 
     local shown = math.min(#grouped.groups, GROUP_ROWS)
-    local arrangeable = current.groupOrder == "listed"
     for i = 1, GROUP_ROWS do
       local g = (i <= shown) and grouped.groups[i] or nil
       state.rowNames[i] = g and g.name or nil
@@ -559,13 +523,6 @@ function M.show(opts)
         visible = g ~= nil,
         selected = g ~= nil and not state.excluded[g.name],
       }
-      -- The arrows only mean anything when the order is the one being
-      -- arranged; under alphabetical or file order they would be undone by
-      -- the next regroup.
-      dlg:modify { id = "up" .. i, visible = g ~= nil,
-                   enabled = arrangeable and g ~= nil and i > 1 }
-      dlg:modify { id = "down" .. i, visible = g ~= nil,
-                   enabled = arrangeable and g ~= nil and i < shown }
     end
     -- Anything past the last row cannot be ticked, so it must not look as
     -- though it were silently dropped.
@@ -590,20 +547,6 @@ function M.show(opts)
   dlg:separator { text = "Frames" }
 
   dlg:label { id = "summary", label = "", text = "" }
-  --- Move the animation on row `i` by one place and rebuild the list.
-  local function moveRow(i, delta)
-    local groups = state.grouped and state.grouped.groups
-    if not groups then return end
-    local j = i + delta
-    if j < 1 or j > #groups then return end
-
-    local names = {}
-    for k, g in ipairs(groups) do names[k] = g.name end
-    names[i], names[j] = names[j], names[i]
-    state.order = names
-    regroup()
-  end
-
   for i = 1, GROUP_ROWS do
     dlg:newrow()
     dlg:check {
@@ -614,10 +557,6 @@ function M.show(opts)
         regroup()
       end,
     }
-    dlg:button { id = "up" .. i, text = "Up", visible = false,
-                 onclick = function() moveRow(i, -1) end }
-    dlg:button { id = "down" .. i, text = "Dn", visible = false,
-                 onclick = function() moveRow(i, 1) end }
   end
   for i = 1, NOTE_ROWS do
     dlg:newrow()
@@ -829,7 +768,6 @@ function M.show(opts)
       M.run(state.entries, current, state.folder, {
         target = spriteForLabel(targetChoices, current.targetLabel),
         excluded = state.excluded,
-        order = state.order,
       })
     end,
   }

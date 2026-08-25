@@ -227,7 +227,7 @@ pattern needs either two captures `(animation)(index)` or three
 | Frame duration | Milliseconds per frame (default 100) |
 | Keep source durations | For multi-frame sources, copy their timing instead |
 | Canvas size | Largest source frame, the first one, or a size you type |
-| Tag order | Alphabetical, the order files were read, or arranged by hand |
+| Tag order | Alphabetical, or the order files were read |
 | Align smaller frames | center, top-left, top-center, bottom-left, bottom-center — bottom-center is usually right for characters standing on a ground line |
 | Color mode | rgb (default), gray, indexed, or match the first source |
 | Tag direction | forward, reverse, ping-pong, ping-pong-reverse |
@@ -286,13 +286,14 @@ and one undo takes it all back.
 
 ### Ordering the animations
 
-**Tag order** can be alphabetical, the order the files were read, or *as
-arranged below*, which turns on the Up and Dn buttons beside each animation.
-The tags are laid down the timeline in whatever order the list ends up in.
+A build lays the tags down alphabetically or in the order the files were read,
+whichever **Tag order** says. Rearranging them is a separate job with its own
+command rather than something the build dialog does, because the two are
+separate decisions: what to bring in, and what order it should end up in.
 
-For a sprite that already exists there is **File ▸ Scripts ▸ Reorder Tags**. It
-lists the tags with the same arrows and, on Apply, rearranges the timeline so
-the frames actually move to match: every layer, every cel position, every frame
+**File ▸ Scripts ▸ Reorder Tags** does the rearranging, on any sprite that has
+more than one tag. It lists them with Up and Down buttons and, on Apply,
+rearranges the timeline so the frames actually move to match: every layer, every cel position, every frame
 duration travels with its own tag, and the tags keep their names, directions and
 colours. Aseprite has no command for moving frames, so this works by lifting the
 cels off the timeline and writing them back in the new order, all inside one

@@ -73,14 +73,13 @@ counts what is actually ticked, and the build button greys out when nothing is.
 
 ## Putting the animations in order
 
-Tags come out alphabetically by default, or in the order the files were read, or
-in an order arranged by hand: the third option turns on arrows beside each
-animation in the list, and the tags are laid down the timeline in whatever order
-that list ends up in.
+Tags come out alphabetically by default, or in the order the files were read.
 
-For a sprite that already exists there is a separate command that reorders the
-tags it already has. It lists them with the same arrows, and on applying it
-rearranges the timeline so the frames really move: every layer, every cel
+Rearranging them afterwards is a separate command rather than part of building,
+since the two are separate decisions: what to bring in, and what order it should
+end up in. It works on any sprite with more than one tag, lists them with Up and
+Down buttons, and on applying it rearranges the timeline so the frames really
+move: every layer, every cel
 position, every frame duration travels with its own tag, and the tags keep their
 names, directions and colours. Aseprite has no command for moving frames, so
 this works by lifting the cels off the timeline and writing them back in the new

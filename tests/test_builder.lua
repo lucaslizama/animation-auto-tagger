@@ -618,46 +618,6 @@ suite("select: a build skips the animations that were unticked", function()
   eq(reports[1].tags[1].name, "run", "and it is the one that stayed ticked")
 end)
 
-suite("order: animations follow the arranged order", function()
-  local ui = require("ui")
-  local entries = withFiles {
-    { "hero_run_00" }, { "hero_idle_00" }, { "hero_jump_00" },
-  }
-  local cfg = config.new()
-  local grouped = naming.group(entries, config.namingOpts(cfg))
-  eq(#grouped.groups, 3, "three animations")
-
-  local arranged = ui.withOrder(grouped, { "run", "jump", "idle" })
-  local names = {}
-  for _, g in ipairs(arranged.groups) do names[#names + 1] = g.name end
-  eq(table.concat(names, ","), "run,jump,idle", "put in the order given")
-
-  -- An order that went stale must not lose anything.
-  local partial = ui.withOrder(grouped, { "jump" })
-  local pnames = {}
-  for _, g in ipairs(partial.groups) do pnames[#pnames + 1] = g.name end
-  eq(table.concat(pnames, ","), "jump,idle,run", "unnamed ones keep their place after")
-
-  local stale = ui.withOrder(grouped, { "walk", "crouch" })
-  eq(#stale.groups, 3, "an order naming nothing that exists still keeps them all")
-  eq(#grouped.groups, 3, "and the original grouping is untouched")
-end)
-
-suite("order: the arranged order is what gets built", function()
-  local ui = require("ui")
-  local entries = withFiles {
-    { "hero_run_00" }, { "hero_idle_00" }, { "hero_jump_00" },
-  }
-  local cfg = config.new()
-  local grouped = ui.withOrder(naming.group(entries, config.namingOpts(cfg)),
-                               { "jump", "run", "idle" })
-  local reports = builder.buildAll(grouped, cfg, { pool = sources.newPool(), folder = "/art" })
-  local names = {}
-  for _, t in ipairs(reports[1].tags) do names[#names + 1] = t.name end
-  eq(table.concat(names, ","), "jump,run,idle", "tags laid down in that order")
-  eq(reports[1].tags[1].from, 1, "and the first one starts at frame 1")
-end)
-
 suite("collect: only image files in the folder become entries", function()
   fake.reset()
   fake.dirs["/art"] = { "hero_run_00.png", "hero_run_01.png", "notes.txt", "sheet.aseprite" }
