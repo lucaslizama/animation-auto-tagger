@@ -151,7 +151,9 @@ appear under **File ▸ Scripts**.
 
 ### Source
 
-MIT licensed, source on GitHub. Bug reports and pull requests welcome.
+MIT licensed. The source is at
+https://github.com/lucaslizama/animation-auto-tagger, and bug reports and pull
+requests are welcome.
 
 ## Assets still to make
 
