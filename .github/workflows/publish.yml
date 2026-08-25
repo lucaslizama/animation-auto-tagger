@@ -78,6 +78,21 @@ jobs:
           chmod +x butler/butler
           butler/butler -V
 
+      # Read-only, and it runs on a manual dispatch as well as a tag, so the
+      # channel can be asked about without publishing anything. Asked with the
+      # same key that does the pushing, which is the only view that counts.
+      - name: Show what itch thinks the channel holds
+        if: always()
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+        run: |
+          if [ -z "$BUTLER_API_KEY" ] || [ -z "$ITCH_TARGET" ]; then
+            echo "nothing to ask with"
+            exit 0
+          fi
+          butler/butler status "$ITCH_TARGET" || true
+
       - name: Push to itch.io
         if: startsWith(github.ref, 'refs/tags/')
         env:
