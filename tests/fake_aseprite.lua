@@ -236,6 +236,9 @@ app.fs = {
   fileTitle = function(p) return ((p:match("([^/]*)$")):gsub("%.[^.]*$", "")) end,
   fileExtension = function(p) return (p:match("%.([^.]*)$")) or "" end,
   normalizePath = function(p) return (p:gsub("//+", "/")) end,
+  -- Registered fake files are the ones that "exist"; anything else does not,
+  -- which is what tells an unsaved sprite from an opened one.
+  isFile = function(p) return F.files ~= nil and F.files[p] ~= nil end,
   isDirectory = function(p) return F.dirs and F.dirs[p] ~= nil end,
   listFiles = function(p) return (F.dirs and F.dirs[p]) or {} end,
 }

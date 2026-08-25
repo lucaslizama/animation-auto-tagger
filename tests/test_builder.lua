@@ -669,15 +669,45 @@ suite("collect: only image files in the folder become entries", function()
   eq(collect.fromFolder("/nope")[1], nil, "a missing folder yields nothing")
 end)
 
-suite("collect: open sprites without a filename are skipped", function()
+suite("collect: only sprites backed by a real file are collected", function()
   fake.reset()
   local collect = require("collect")
-  local named = fake.newSprite(16, 16, fake.ColorMode.RGB, { filename = "/art/hero_run_00.png" })
-  fake.newSprite(16, 16, fake.ColorMode.RGB)
+  fake.files["/art/hero_run_00.png"] = { width = 16, height = 16 }
+
+  local opened = fake.newSprite(16, 16, fake.ColorMode.RGB,
+    { filename = "/art/hero_run_00.png" })
+  fake.newSprite(16, 16, fake.ColorMode.RGB)                       -- no name at all
+  -- What Aseprite calls a sprite nobody has saved. It is not empty-named, so
+  -- checking for an empty name let it through and it was read as an animation
+  -- called "Sprite-" holding all of its frames.
+  fake.newSprite(16, 16, fake.ColorMode.RGB, { filename = "Sprite-0001" })
+  -- And what the builder leaves behind: named after the character, saved
+  -- nowhere yet.
+  fake.newSprite(16, 16, fake.ColorMode.RGB, { filename = "/art/hero.aseprite" })
+
   local entries = collect.fromSprites(fake.app.sprites)
-  eq(#entries, 1, "only the saved one")
-  eq(entries[1].sprite, named, "carries the sprite itself")
+  eq(#entries, 1, "only the one that came from a file")
+  eq(entries[1].sprite, opened, "carries the sprite itself")
   eq(collect.commonFolder(entries), "/art", "common folder")
+end)
+
+suite("collect: a freshly built sprite is not offered back as a source", function()
+  fake.reset()
+  local collect = require("collect")
+  local ui = require("ui")
+  -- Exactly what opening the build dialog over a finished sprite used to show:
+  -- one animation, every frame in it.
+  local built = fake.newSprite(32, 32, fake.ColorMode.RGB,
+    { filename = "Sprite-0001", frameCount = 47 })
+  built:newTag(1, 47).name = "idle"
+
+  local entries = collect.fromSprites(fake.app.sprites)
+  eq(#entries, 0, "nothing to build from")
+
+  local cfg = config.new()
+  local grouped = naming.group(entries, config.namingOpts(cfg))
+  eq(#grouped.groups, 0, "so no animations are listed")
+  eq(ui.frameTotal(grouped, cfg), 0, "and no frame count")
 end)
 
 suite("build: everything wrapped in a single transaction per sprite", function()

@@ -48,7 +48,14 @@ end
 function M.fromSprites(spriteList, only)
   local entries = {}
   for _, sprite in ipairs(spriteList) do
-    if (not only or only[sprite.id]) and sprite.filename and sprite.filename ~= "" then
+    -- The filename has to name a file that is really there. An unsaved sprite
+    -- is not empty-named: Aseprite calls it "Sprite-0001", which would be read
+    -- as an animation called "Sprite-" holding every frame in it. A sprite the
+    -- builder has just named is the same story, a path with nothing behind it
+    -- yet. Neither is a frame anyone dropped.
+    local saved = sprite.filename and sprite.filename ~= ""
+                  and app.fs.isFile(sprite.filename)
+    if (not only or only[sprite.id]) and saved then
       entries[#entries + 1] = {
         title = app.fs.fileTitle(sprite.filename),
         sprite = sprite,
