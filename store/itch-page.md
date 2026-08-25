@@ -166,10 +166,16 @@ change it, edit the SVG and re-export:
 
     rsvg-convert -w 630 -h 500 store/cover.svg -o store/cover.png
 
-**A short GIF, twenty seconds at most.** This sells the tool better than any
-paragraph above. Frames dragged onto Aseprite, the prompt appearing, one
-animation unticked, Build pressed, the tagged timeline filling in. If there is
-room, end on the tags showing up as clips in Godot.
+**A short GIF.** Done: `store/demo.gif`, 900 by 558, 12.5 seconds, under a
+megabyte. Three shots cut from one recording: a frame being dragged out of a
+folder of 47, the prompt listing the twelve animations it found with three of
+them unticked, and the built sprite with its colour-coded timeline. The middle
+shot is framed close enough to read, which is the reason it is cut rather than
+shown as one wide take.
+
+Remade from a recording with:
+
+    scripts/make-gif.sh recording.webm store/demo.gif --width 900 --fps 12
 
 **Three or four screenshots.** The drop prompt with its checkboxes. The full
 options dialog. A finished timeline with coloured tags. A before and after of
