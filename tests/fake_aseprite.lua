@@ -31,6 +31,12 @@ function Image:drawSprite(sprite, frame, pos)
   self.drawn[#self.drawn + 1] = { sprite = sprite, frame = frame, pos = pos }
 end
 
+function Image:drawImage(image, pos)
+  self.drawn[#self.drawn + 1] = { image = image, pos = pos }
+end
+
+function Image:isEmpty() return #self.drawn == 0 end
+
 ------------------------------------------------------------ layer / cel
 
 local Layer = {}
@@ -208,6 +214,19 @@ app.command = setmetatable({}, {
       if name == "ChangePixelFormat" and app.sprite then
         app.sprite.colorMode = params.format
       end
+      -- CanvasSize takes padding per side and carries the existing cels along
+      -- with it, which is what a script relies on when growing a sprite.
+      if name == "CanvasSize" and app.sprite then
+        local s = app.sprite
+        local left, top = params.left or 0, params.top or 0
+        s.width = s.width + left + (params.right or 0)
+        s.height = s.height + top + (params.bottom or 0)
+        for _, layer in ipairs(s.layers) do
+          for _, cel in pairs(layer.celsByFrame) do
+            cel.position = Point(cel.position.x + left, cel.position.y + top)
+          end
+        end
+      end
     end
   end,
 })
@@ -238,8 +257,24 @@ function F.install()
   end })
 
   _G.Image = setmetatable({}, { __call = function(_, a, b, c)
-    if type(a) == "table" then error("Image{fromFile=} is not stubbed") end
+    if type(a) == "table" then
+      -- Image{fromFile=} reads one still frame and opens no sprite, which is
+      -- the whole point of it: nothing is added to F.app.sprites here.
+      local spec = F.files[a.fromFile]
+      if not spec then error("no such fake file: " .. tostring(a.fromFile)) end
+      local img = newImage(spec.width, spec.height, spec.colorMode or ColorMode.RGB)
+      img.fromFile = a.fromFile
+      return img
+    end
     return newImage(a, b, c or ColorMode.RGB)
+  end })
+
+  _G.Palette = setmetatable({}, { __call = function(_, a)
+    if type(a) == "table" and a.fromFile then
+      local spec = F.files[a.fromFile]
+      return newPalette(spec and spec.paletteColors)
+    end
+    return newPalette()
   end })
 
   _G.Sprite = setmetatable({}, { __call = function(_, a, b, c)

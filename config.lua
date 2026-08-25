@@ -8,7 +8,7 @@ local naming = require("naming")
 local M = {}
 
 M.ALIGNMENTS   = { "center", "top-left", "top-center", "bottom-left", "bottom-center" }
-M.CANVAS_MODES = { "max", "first" }
+M.CANVAS_MODES = { "max", "first", "custom" }
 M.COLOR_MODES  = { "rgb", "gray", "indexed", "same as first source" }
 M.ANI_DIRS     = { "forward", "reverse", "ping-pong", "ping-pong-reverse" }
 M.COMPLETE_DROPS = { "folder", "gaps", "off" }
@@ -29,6 +29,8 @@ M.defaults = {
   keepSourceDurations = false,
   buildTarget       = "new sprite",   -- or "an open sprite", to append instead
   canvasMode        = "max",
+  canvasWidth       = 64,     -- only read when canvasMode is "custom"
+  canvasHeight      = 64,
   align             = "center",
   colorMode         = "rgb",
   expandMultiFrame  = true,

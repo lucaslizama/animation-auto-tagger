@@ -148,8 +148,14 @@ That is a nice feature in general and a menace here, since the numbered-suffix
 naming is the very thing this plugin keys on — six files would each contribute
 all six frames and you would end up with 21 frames instead of 6.
 
-Files the plugin opens itself are therefore loaded one frame at a time, which
-settles the folder path completely.
+Files the plugin reads itself sidestep this entirely: a still frame is read as
+an `Image`, not opened as a `Sprite`. An image is one frame by definition, so
+there is no sequence to detect — and no tab, either. Build from a folder of
+eighty frames and no document appears but the one you asked for.
+
+Only files that genuinely hold an animation — `.gif`, `.aseprite`, `.webp`,
+`.flc` — still need opening, and those are one file per animation rather than
+one per frame.
 
 Sprites that were *already* open are a different matter, and it cuts the other
 way: drag twenty frames in and Aseprite hands you five sprites, each holding a
@@ -165,6 +171,17 @@ The two behaviours compose, which is the point: a drop that lost eleven of its
 twenty files, where the nine survivors each dragged part of their run along with
 them, still comes out as one 20-frame sprite with five correct tags. There is an
 end-to-end test for exactly that.
+
+### What this does not fix
+
+Aseprite adds an entry to its recent-files list for every file it loads, and it
+does so inside its own loader — `Image{fromFile}` and `Sprite{fromFile}` are
+recorded alike. There is no `app.recentFiles` to read or prune, and
+`general.recent_items = 0` does not suppress the recording. So importing a
+folder of frames still fills that list, and with a default cap of 16 entries it
+will push out whatever was there before. The only lever Aseprite offers is
+`ClearRecentFiles`, which empties the list entirely, your own history included —
+too blunt to do to someone without asking, so the plugin does not.
 
 ## The naming convention
 
@@ -201,7 +218,7 @@ pattern needs either two captures `(animation)(index)` or three
 | Build into | A new sprite, or one already open — see below |
 | Frame duration | Milliseconds per frame (default 100) |
 | Keep source durations | For multi-frame sources, copy their timing instead |
-| Canvas size | Largest source frame, or the first one |
+| Canvas size | Largest source frame, the first one, or a size you type |
 | Align smaller frames | center, top-left, top-center, bottom-left, bottom-center — bottom-center is usually right for characters standing on a ground line |
 | Color mode | rgb (default), gray, indexed, or match the first source |
 | Tag direction | forward, reverse, ping-pong, ping-pong-reverse |
@@ -224,11 +241,20 @@ timeline instead of making a new one, on a layer of its own, in one undo step.
 The second dropdown picks which open sprite; it is numbered because two tabs can
 share a name and an unsaved one has none.
 
-The sprite being appended to keeps everything about itself — its canvas size,
-its colour mode, its filename. Frames wider or taller than its canvas are
-cropped, and **Canvas size**, **Color mode** and **Name the sprite after the
-base** stop applying. **One sprite per base name** cannot apply either: it asks
-for several sprites and there is only one.
+The sprite being appended to keeps its colour mode and its filename, so
+**Color mode** and **Name the sprite after the base** stop applying. **One
+sprite per base name** cannot apply either: it asks for several sprites and
+there is only one.
+
+Its canvas, though, will change. Frames wider or taller than it are not cropped
+— the canvas is enlarged to hold them and the art already on it moves to
+wherever **Align smaller frames** says, all inside the same undo step.
+
+`largest source frame` and `first source frame` can only ever grow it, since
+they are read off the incoming frames rather than asked for. A **custom** size
+is different: it is a number you typed, so it is honoured even when it is
+smaller than the sprite — but because that crops art which was there first, it
+asks before doing it, and cancelling builds nothing.
 
 Two things are worth knowing. A sprite cannot be appended to itself — if the
 target is also one of the frames going in, the build is refused rather than
@@ -293,7 +319,7 @@ which no stand-in would have predicted.
 | `main.lua` | Plugin entry point, menu commands, settings dialog |
 | `naming.lua` | Filename parsing and grouping (pure Lua, no Aseprite) |
 | `collect.lua` | Gathering candidate frames from a folder or from open sprites |
-| `sources.lua` | Opening, colour-converting and closing source sprites |
+| `sources.lua` | Reading source frames — as images where possible, sprites where not |
 | `builder.lua` | Assembling the tagged sprite |
 | `ui.lua` | The main dialog |
 | `watcher.lua` | Timer-based drop detection |

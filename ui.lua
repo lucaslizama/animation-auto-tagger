@@ -27,6 +27,7 @@ local GROUP_ORDERS = {
 local CANVAS_MODES = {
   { "largest source frame", "max" },
   { "first source frame",   "first" },
+  { "custom",               "custom" },
 }
 
 local function labelsOf(pairsList)
@@ -158,6 +159,8 @@ local function readConfig(dlg, base)
   cfg.buildTarget       = d.buildTarget
   cfg.targetLabel       = d.targetSprite   -- runtime only, never persisted
   cfg.canvasMode        = valueFor(CANVAS_MODES, d.canvasMode)
+  cfg.canvasWidth       = math.max(1, math.floor(tonumber(d.canvasWidth) or 1))
+  cfg.canvasHeight      = math.max(1, math.floor(tonumber(d.canvasHeight) or 1))
   cfg.align             = d.align
   cfg.colorMode         = d.colorMode
   cfg.aniDir            = d.aniDir
@@ -203,9 +206,27 @@ function M.run(entries, cfg, folder, target)
     end
   end
 
+  -- Cropping art that was on the sprite before this ran is not something to
+  -- report after the event, so it is asked about while it can still be
+  -- refused. Only a typed size gets here; max and first never shrink anything.
+  local allowShrink = false
+  if target and cfg.canvasMode == "custom"
+     and (cfg.canvasWidth < target.width or cfg.canvasHeight < target.height) then
+    local name = (target.filename ~= "" and app.fs.fileTitle(target.filename)) or "the sprite"
+    local answer = app.alert {
+      title = "Animation Auto-Tagger",
+      text = { ("Resizing to %dx%d will crop %s, which is %dx%d.")
+                 :format(cfg.canvasWidth, cfg.canvasHeight, name, target.width, target.height),
+               "Anything outside the new canvas is lost." },
+      buttons = { "Resize", "Cancel" },
+    }
+    if answer ~= 1 then return false end
+    allowShrink = true
+  end
+
   local pool = sources.newPool()
   local reports, errors, notes = builder.buildAll(grouped, cfg,
-    { pool = pool, folder = folder, target = target })
+    { pool = pool, folder = folder, target = target, allowShrink = allowShrink })
   sources.release(pool, cfg)
 
   if #reports == 0 then
@@ -471,6 +492,19 @@ function M.show(opts)
   dlg:combobox {
     id = "canvasMode", label = "Canvas size",
     option = labelFor(CANVAS_MODES, cfg.canvasMode), options = labelsOf(CANVAS_MODES),
+    onchange = function()
+      local custom = valueFor(CANVAS_MODES, dlg.data.canvasMode) == "custom"
+      dlg:modify { id = "canvasWidth", enabled = custom }
+      dlg:modify { id = "canvasHeight", enabled = custom }
+    end,
+  }
+  dlg:number {
+    id = "canvasWidth", label = "", text = tostring(cfg.canvasWidth), decimals = 0,
+    enabled = cfg.canvasMode == "custom",
+  }
+  dlg:number {
+    id = "canvasHeight", label = "x", text = tostring(cfg.canvasHeight), decimals = 0,
+    enabled = cfg.canvasMode == "custom",
   }
   dlg:combobox {
     id = "align", label = "Align smaller frames",

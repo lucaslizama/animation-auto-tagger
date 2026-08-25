@@ -31,6 +31,7 @@ function M.newPool()
     converted = {},  -- "<sprite id>:<mode>" -> sprite, so one source converts once
     external = {},   -- sprite id -> sprite, sprites that were already open
     order    = {},   -- opened sprites, in open order, for deterministic cleanup
+    images   = {},   -- path -> { image, palette }, still frames read without a sprite
   }
 end
 
@@ -68,6 +69,40 @@ function M.spriteFor(pool, item, cfg)
   pool.byPath[item.path] = result
   remember(pool, result, true)
   return result
+end
+
+--- Read a still frame as a bare Image, opening no sprite for it.
+--
+-- Sprite{fromFile} gives every frame a tab to be closed again afterwards, and
+-- a folder of eighty frames means eighty tabs opening and closing while the
+-- build runs. An Image reads the same pixels and leaves no document behind.
+--
+-- It does not fold numbered sequences either, so the oneFrame guard that the
+-- sprite path needs does not arise here at all.
+--
+-- (Aseprite records a recent-files entry for either route -- that happens
+-- inside its loader, below anything a script can reach.)
+function M.imageFor(pool, item)
+  local cached = pool.images[item.path]
+  if cached then return cached end
+
+  local ok, img = pcall(function() return Image { fromFile = item.path } end)
+  if not ok or not img then
+    return nil, ("%s: could not be read%s")
+      :format(item.title, ok and "" or (" (" .. tostring(img) .. ")"))
+  end
+
+  -- Only indexed art needs its palette carried along; for anything else the
+  -- read would be wasted work.
+  local palette
+  if img.colorMode == ColorMode.INDEXED then
+    local okPal, pal = pcall(function() return Palette { fromFile = item.path } end)
+    palette = okPal and pal or nil
+  end
+
+  local entry = { image = img, palette = palette }
+  pool.images[item.path] = entry
+  return entry
 end
 
 local function modeName(colorMode)
@@ -140,19 +175,36 @@ function M.expand(pool, groups, cfg)
     local coveredUpTo = nil   -- last frame index consumed by an expanded sequence
 
     for _, item in ipairs(group.items) do
-      local sprite, err = M.spriteFor(pool, item, cfg)
-      if not sprite then
-        errors[#errors + 1] = err
-      elseif coveredUpTo and item.index and item.index <= coveredUpTo then
+      -- Checked before anything is loaded: a frame the folder completion found
+      -- but a folded sequence already covers must not be read at all, let
+      -- alone counted twice.
+      if coveredUpTo and item.index and item.index <= coveredUpTo then
         notes[#notes + 1] = ("%s was already part of a sequence Aseprite had loaded")
           :format(item.title)
       else
-        local last = cfg.expandMultiFrame and #sprite.frames or 1
-        for f = 1, last do
-          refs[#refs + 1] = { sprite = sprite, frame = f, item = item }
-        end
-        if last > 1 and item.index then
-          coveredUpTo = item.index + last - 1
+        -- A plain still on disk is read as an image; only an already-open
+        -- sprite or a file that genuinely holds an animation needs a document.
+        local asImage = item.path and not item.sprite and not M.holdsAnimation(item.path)
+        if asImage then
+          local entry, imgErr = M.imageFor(pool, item)
+          if entry then
+            refs[#refs + 1] = { image = entry.image, palette = entry.palette, item = item }
+          else
+            errors[#errors + 1] = imgErr
+          end
+        else
+          local sprite, err = M.spriteFor(pool, item, cfg)
+          if not sprite then
+            errors[#errors + 1] = err
+          else
+            local last = cfg.expandMultiFrame and #sprite.frames or 1
+            for f = 1, last do
+              refs[#refs + 1] = { sprite = sprite, frame = f, item = item }
+            end
+            if last > 1 and item.index then
+              coveredUpTo = item.index + last - 1
+            end
+          end
         end
       end
     end
@@ -197,18 +249,26 @@ function M.survey(groups)
 
   for _, group in ipairs(groups) do
     for _, ref in ipairs(group.refs) do
-      local s = ref.sprite
-      if s.width > width then width = s.width end
-      if s.height > height then height = s.height end
-      if not seen[s.id] then
-        seen[s.id] = true
-        first = first or s
-        local m = modeName(s.colorMode)
+      -- Image-backed and sprite-backed refs answer the same questions; only
+      -- where the answers live differs.
+      local src = ref.image or ref.sprite
+      local key = ref.image or ref.sprite.id
+      if src.width > width then width = src.width end
+      if src.height > height then height = src.height end
+      if not seen[key] then
+        seen[key] = true
+        first = first or {
+          width = src.width,
+          height = src.height,
+          colorMode = src.colorMode,
+          transparentColor = ref.sprite and ref.sprite.transparentColor or 0,
+        }
+        local m = modeName(src.colorMode)
         modes[m] = (modes[m] or 0) + 1
         if m ~= "indexed" then
           allIndexed = false
         elseif allIndexed then
-          local pal = s.palettes[1]
+          local pal = ref.palette or (ref.sprite and ref.sprite.palettes[1])
           if sharedPalette == nil then
             sharedPalette = pal
           elseif not palettesMatch(sharedPalette, pal) then
@@ -239,6 +299,8 @@ function M.release(pool, cfg)
   for _, s in ipairs(pool.order) do
     pcall(function() s:close() end)
   end
+  -- Images hold no document, so dropping the table is the whole cleanup.
+  pool.images = {}
   pool.order, pool.byPath, pool.ours, pool.converted = {}, {}, {}, {}
 
   if cfg and cfg.closeSources then

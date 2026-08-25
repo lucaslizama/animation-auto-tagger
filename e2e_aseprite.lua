@@ -34,10 +34,15 @@ local grouped = naming.group(entries, config.namingOpts(cfg))
 eq(#grouped.groups, 5, "five animations")
 eq(naming.frameCount(grouped.groups), 20, "twenty frames")
 
+-- The point of reading still frames as images: building from a folder of 20
+-- must not open 20 documents. Only the sprite it produces should appear.
+local spritesBefore = #app.sprites
 local pool = sources.newPool()
 local reports, errors = builder.buildAll(grouped, cfg, { pool = pool, folder = samples })
 for _, e in ipairs(errors) do print("  error: " .. e) end
 eq(#errors, 0, "no errors")
+eq(#app.sprites - spritesBefore, 1, "20 frames read, exactly one document created")
+eq(#pool.order, 0, "no source was opened as a document")
 eq(#reports, 1, "one sprite built")
 
 local r = reports[1]
@@ -248,6 +253,104 @@ eq(#reopenedAppend.layers, 2, "reopened: both layers")
 local rrf, rrt = tagRange(reopenedAppend.tags[6])
 eq(rrf .. "-" .. rrt, "18-23", "reopened: appended tag range survived the round trip")
 reopenedAppend:close()
+
+--------------------------------------------------------------------------
+-- Growing the canvas of the sprite being appended to. The sample attack
+-- frames are 40 wide, so a 24x24 target has to grow and carry its own art
+-- along with it -- which is CanvasSize behaviour, not something a script can
+-- assume.
+--------------------------------------------------------------------------
+
+local small = Sprite(24, 24, ColorMode.RGB)
+local mark = Image(8, 8, ColorMode.RGB)
+mark:clear(Color { r = 255, g = 0, b = 0 })
+small:newCel(small.layers[1], 1, mark, Point(8, 8))
+eq(small.width .. "x" .. small.height, "24x24", "target starts at 24x24")
+
+local pool7 = sources.newPool()
+local reports7, errors7 = builder.buildAll(
+  naming.group(collect.fromFolder(samples), config.namingOpts(cfg)), cfg,
+  { pool = pool7, folder = samples, target = small })
+for _, e in ipairs(errors7) do print("  error: " .. e) end
+eq(#errors7, 0, "no errors")
+eq(small.width .. "x" .. small.height, "40x32", "grew to hold the widest frames")
+eq(reports7[1].canvas.width, 40, "report agrees on width")
+
+-- cfg.align is "center", so the old 24x24 canvas sits at ((40-24)/2, (32-24)/2)
+-- and the mark that was at 8,8 inside it moves with it.
+local moved = small.layers[1]:cel(1)
+eq(moved.position.x, 8 + 8, "existing art moved with the canvas, horizontally")
+eq(moved.position.y, 8 + 4, "and vertically")
+
+local grewWarning = false
+for _, w in ipairs(reports7[1].warnings) do
+  if w:find("canvas grew from 24x24 to 40x32", 1, true) then grewWarning = true end
+end
+eq(grewWarning, true, "the resize was reported")
+
+sources.release(pool7, cfg)
+small:close()
+
+--------------------------------------------------------------------------
+-- Shrinking a target, once the caller has confirmed it. Aseprite takes
+-- negative CanvasSize padding to crop, and moves the cels with it.
+--------------------------------------------------------------------------
+
+local big = Sprite(64, 64, ColorMode.RGB)
+local bigMark = Image(16, 16, ColorMode.RGB)
+bigMark:clear(Color { r = 0, g = 0, b = 255 })
+big:newCel(big.layers[1], 1, bigMark, Point(24, 24))
+
+local shrinkCfg = config.new()
+shrinkCfg.closeSources = false
+shrinkCfg.canvasMode = "custom"
+shrinkCfg.canvasWidth, shrinkCfg.canvasHeight = 32, 32
+
+local pool9 = sources.newPool()
+local reports9, errors9 = builder.buildAll(
+  naming.group(collect.fromFolder(samples), config.namingOpts(shrinkCfg)), shrinkCfg,
+  { pool = pool9, folder = samples, target = big, allowShrink = true })
+for _, e in ipairs(errors9) do print("  error: " .. e) end
+eq(#errors9, 0, "no errors")
+eq(big.width .. "x" .. big.height, "32x32", "shrunk to the size that was asked for")
+-- Centring a 64x64 canvas into 32x32 takes 16 off each side.
+eq(big.layers[1]:cel(1).position.x, 24 - 16, "existing art moved with the crop")
+sources.release(pool9, shrinkCfg)
+big:close()
+
+-- Without that confirmation the same request must leave the sprite alone.
+local big2 = Sprite(64, 64, ColorMode.RGB)
+local pool10 = sources.newPool()
+local reports10 = builder.buildAll(
+  naming.group(collect.fromFolder(samples), config.namingOpts(shrinkCfg)), shrinkCfg,
+  { pool = pool10, folder = samples, target = big2 })
+eq(big2.width .. "x" .. big2.height, "64x64", "unconfirmed, so left as it was")
+local refused = false
+for _, w in ipairs(reports10[1].warnings) do
+  if w:find("would crop the sprite being appended to", 1, true) then refused = true end
+end
+eq(refused, true, "and said why")
+sources.release(pool10, shrinkCfg)
+big2:close()
+
+--------------------------------------------------------------------------
+-- A custom canvas size, taken exactly as given.
+--------------------------------------------------------------------------
+
+local customCfg = config.new()
+customCfg.closeSources = false
+customCfg.canvasMode = "custom"
+customCfg.canvasWidth, customCfg.canvasHeight = 64, 48
+
+local pool8 = sources.newPool()
+local reports8, errors8 = builder.buildAll(
+  naming.group(collect.fromFolder(samples), config.namingOpts(customCfg)), customCfg,
+  { pool = pool8, folder = samples })
+eq(#errors8, 0, "no errors")
+eq(reports8[1].sprite.width .. "x" .. reports8[1].sprite.height, "64x48",
+   "built at the custom size")
+reports8[1].sprite:close()
+sources.release(pool8, customCfg)
 
 --------------------------------------------------------------------------
 -- Appending a sprite into itself has to be refused, not attempted.

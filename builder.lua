@@ -35,6 +35,45 @@ local function offsetFor(align, cw, ch, w, h)
 end
 M.offsetFor = offsetFor
 
+--- The canvas the options ask for, before any target sprite has a say.
+local function requestedCanvas(cfg, survey)
+  if cfg.canvasMode == "custom" then
+    return math.max(1, math.floor(cfg.canvasWidth or 1)),
+           math.max(1, math.floor(cfg.canvasHeight or 1))
+  elseif cfg.canvasMode == "first" and survey.first then
+    return survey.first.width, survey.first.height
+  end
+  return survey.width, survey.height
+end
+M.requestedCanvas = requestedCanvas
+
+--- Resize `sprite` to w x h, putting what is already there where `align` says.
+--
+-- CanvasSize takes the padding to add on each side -- negative to take it away
+-- again -- and moves the existing cels along with it. That is the whole reason
+-- to use it over assigning sprite.width, which would leave the art in the
+-- corner of whatever the new canvas turned out to be.
+local function resizeCanvas(sprite, w, h, align)
+  local dw, dh = w - sprite.width, h - sprite.height
+  if dw == 0 and dh == 0 then return false end
+
+  -- offsetFor answers width and height independently, so handing it the
+  -- smaller of each pair gives the edge to add on the left and top -- or, when
+  -- shrinking, the edge to take off them.
+  local ox, oy = offsetFor(align,
+    math.max(w, sprite.width), math.max(h, sprite.height),
+    math.min(w, sprite.width), math.min(h, sprite.height))
+  local left = (dw >= 0) and ox or -ox
+  local top  = (dh >= 0) and oy or -oy
+
+  app.sprite = sprite
+  app.command.CanvasSize {
+    ui = false, left = left, top = top, right = dw - left, bottom = dh - top,
+  }
+  return true
+end
+M.resizeCanvas = resizeCanvas
+
 --- Resolve the color mode the finished sprite should have.
 -- Returns targetMode ("rgb"/"gray"/"indexed"), buildMode (the mode used while
 -- compositing) and whether the indexed fast path applies.
@@ -61,7 +100,8 @@ M.resolveModes = resolveModes
 function M.targetConflict(groups, target)
   for _, group in ipairs(groups) do
     for _, ref in ipairs(group.refs) do
-      if ref.sprite.id == target.id then
+      -- Image-backed refs hold no document, so they can never be the target.
+      if ref.sprite and ref.sprite.id == target.id then
         local name = (target.filename ~= "" and app.fs.fileTitle(target.filename)) or "the target sprite"
         return ("%s is one of the frames being added to it; pick a different sprite under \"Build into\"")
           :format(name)
@@ -94,13 +134,24 @@ function M.build(groups, cfg, opts)
     if err then return nil, err end
   end
 
-  local canvasW, canvasH
+  local canvasW, canvasH = requestedCanvas(cfg, survey)
   if target then
-    canvasW, canvasH = target.width, target.height
-  elseif cfg.canvasMode == "first" and survey.first then
-    canvasW, canvasH = survey.first.width, survey.first.height
-  else
-    canvasW, canvasH = survey.width, survey.height
+    local smaller = canvasW < target.width or canvasH < target.height
+    if cfg.canvasMode ~= "custom" then
+      -- max and first are read off the sources, so they are a floor rather
+      -- than a request: a target bigger than they ask for simply stays put.
+      canvasW = math.max(canvasW, target.width)
+      canvasH = math.max(canvasH, target.height)
+    elseif smaller and not opts.allowShrink then
+      -- A typed size is an instruction, but one that crops art the user
+      -- already had needs asking about first -- which is the caller's job
+      -- (see ui.run), because only it can put a question on screen.
+      warnings[#warnings + 1] = ("a %dx%d canvas would crop the sprite being appended to; kept %dx%d")
+        :format(canvasW, canvasH, math.max(canvasW, target.width),
+                math.max(canvasH, target.height))
+      canvasW = math.max(canvasW, target.width)
+      canvasH = math.max(canvasH, target.height)
+    end
   end
   if canvasW < 1 or canvasH < 1 then
     return nil, "source frames have no size"
@@ -126,14 +177,18 @@ function M.build(groups, cfg, opts)
   end
   local buildEnum = COLOR_MODE_ENUM[buildMode]()
 
-  -- Convert sources up front so drawSprite never has to cross color modes.
+  -- Convert sprite sources up front so drawSprite never has to cross color
+  -- modes. Image sources are left alone: drawImage converts as it draws, which
+  -- is the whole reason a still frame needs no document of its own.
   for _, group in ipairs(groups) do
     for _, ref in ipairs(group.refs) do
-      local converted, err = sources.asColorMode(pool, ref.sprite, buildMode)
-      if converted then
-        ref.sprite = converted
-      else
-        warnings[#warnings + 1] = err
+      if not ref.image then
+        local converted, err = sources.asColorMode(pool, ref.sprite, buildMode)
+        if converted then
+          ref.sprite = converted
+        else
+          warnings[#warnings + 1] = err
+        end
       end
     end
   end
@@ -177,8 +232,14 @@ function M.build(groups, cfg, opts)
     end
   end
 
+  local resized, wasW, wasH = false, target and target.width, target and target.height
+
   app.transaction(target and "Append tagged animation" or "Build tagged animation", function()
     if target then
+      -- Before any cel is placed, so offsetFor works against the final size.
+      if resizeCanvas(dest, canvasW, canvasH, cfg.align) then
+        resized = true
+      end
       for i = 1, total do dest:newEmptyFrame(frameBase + i) end
       for _, h in ipairs(held) do
         h.tag.fromFrame = dest.frames[h.from]
@@ -194,9 +255,15 @@ function M.build(groups, cfg, opts)
       for _, ref in ipairs(group.refs) do
         frameIndex = frameIndex + 1
 
-        local src = ref.sprite
+        local src = ref.image or ref.sprite
         local img = Image(src.width, src.height, buildEnum)
-        img:drawSprite(src, ref.frame)
+        if ref.image then
+          -- Always into a fresh image, never the cached one: the same file can
+          -- appear in two groups, and a cel must not share pixels with another.
+          img:drawImage(ref.image, Point(0, 0))
+        else
+          img:drawSprite(src, ref.frame)
+        end
 
         local dx, dy = offsetFor(cfg.align, canvasW, canvasH, src.width, src.height)
         if src.width > canvasW or src.height > canvasH then
@@ -209,9 +276,10 @@ function M.build(groups, cfg, opts)
         dest:newCel(layer, frameBase + frameIndex, img, Point(dx, dy))
 
         local frame = dest.frames[frameBase + frameIndex]
-        if cfg.keepSourceDurations then
+        if cfg.keepSourceDurations and ref.sprite then
           frame.duration = src.frames[ref.frame].duration
         else
+          -- A still frame carries no timing of its own to keep.
           frame.duration = duration
         end
       end
@@ -233,6 +301,16 @@ function M.build(groups, cfg, opts)
                           to = frameBase + frameIndex, count = #group.refs }
     end
   end)
+
+  if resized then
+    if canvasW >= wasW and canvasH >= wasH then
+      warnings[#warnings + 1] = ("the canvas grew from %dx%d to %dx%d to fit the new frames")
+        :format(wasW, wasH, canvasW, canvasH)
+    else
+      warnings[#warnings + 1] = ("the canvas went from %dx%d to %dx%d; anything outside it was cropped")
+        :format(wasW, wasH, canvasW, canvasH)
+    end
+  end
 
   -- Both of these rewrite the sprite as a whole, which is fine for one this
   -- function just made and never acceptable for one the user already had.
@@ -298,6 +376,7 @@ function M.buildAll(grouped, cfg, opts)
       baseName = bucket.base,
       folder = opts.folder,
       target = target,
+      allowShrink = opts.allowShrink,
     })
     if report then
       reports[#reports + 1] = report

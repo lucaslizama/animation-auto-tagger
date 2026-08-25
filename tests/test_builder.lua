@@ -49,8 +49,9 @@ local function buildFrom(specs, overrides)
 end
 
 --- Build into an existing sprite. `target` describes the sprite appended to.
-local function appendFrom(specs, overrides, target)
+local function appendFrom(specs, overrides, target, buildOpts)
   target = target or {}
+  buildOpts = buildOpts or {}
   local entries = withFiles(specs)   -- resets the fake, so the target comes after
   local dest = fake.newSprite(target.width or 16, target.height or 16,
     target.colorMode or fake.ColorMode.RGB,
@@ -61,13 +62,15 @@ local function appendFrom(specs, overrides, target)
   for _, name in ipairs(target.tags or {}) do
     dest:newTag(1, #dest.frames).name = name
   end
+  -- Art already on the sprite, so a canvas grow can be seen to move it.
+  dest:newCel(dest.layers[1], 1, Image(dest.width, dest.height), Point(0, 0))
   local cfg = config.new()
   cfg.buildTarget = "active sprite"
   for k, v in pairs(overrides or {}) do cfg[k] = v end
   local grouped = naming.group(entries, config.namingOpts(cfg))
   local pool = sources.newPool()
   local reports, errors = builder.buildAll(grouped, cfg,
-    { pool = pool, folder = "/art", target = dest })
+    { pool = pool, folder = "/art", target = dest, allowShrink = buildOpts.allowShrink })
   return reports, errors, dest
 end
 
@@ -107,11 +110,23 @@ suite("build: every frame gets exactly one cel drawn from its source", function(
   for f = 1, 2 do
     local cel = layer:cel(f)
     check(cel ~= nil, "cel exists at frame " .. f)
-    eq(#cel.image.drawn, 1, "one drawSprite call for frame " .. f)
-    eq(cel.image.drawn[1].frame, 1, "drew source frame 1")
+    eq(#cel.image.drawn, 1, "one draw call for frame " .. f)
   end
-  eq(layer:cel(1).image.drawn[1].sprite.filename, "/art/hero_run_00.png", "frame 1 source")
-  eq(layer:cel(2).image.drawn[1].sprite.filename, "/art/hero_run_01.png", "frame 2 source")
+  -- Still frames are read as images, so each cel is drawn from a file rather
+  -- than from a sprite that had to be opened for it.
+  eq(layer:cel(1).image.drawn[1].image.fromFile, "/art/hero_run_00.png", "frame 1 source")
+  eq(layer:cel(2).image.drawn[1].image.fromFile, "/art/hero_run_01.png", "frame 2 source")
+end)
+
+suite("sources: still frames are read without opening a sprite", function()
+  local _, _, _, pool = buildFrom {
+    { "hero_run_00" }, { "hero_run_01" }, { "hero_idle_00" },
+  }
+  eq(#pool.order, 0, "nothing was opened as a document")
+  eq(#fake.app.sprites, 1, "only the sprite that was built exists")
+  local cached = 0
+  for _ in pairs(pool.images) do cached = cached + 1 end
+  eq(cached, 3, "each file read once, and cached")
 end)
 
 suite("build: canvas is the largest source and smaller frames are aligned", function()
@@ -252,16 +267,16 @@ suite("build: splitByBase produces one sprite per character", function()
   eq(reports[1].sprite.layers[1].name, "hero", "layer named after the base")
 end)
 
-suite("build: indexed sources are converted to rgb by default", function()
+suite("build: indexed sources are composited as rgb by default", function()
   local reports = buildFrom({
     { "hero_run_00", colorMode = fake.ColorMode.INDEXED, paletteColors = { 1, 2, 3 } },
   })
   eq(reports[1].colorMode, "rgb", "result is rgb")
-  local converted = false
-  for _, c in ipairs(fake.app.commands) do
-    if c.name == "ChangePixelFormat" and c.params.format == "rgb" then converted = true end
-  end
-  check(converted, "the source was converted before compositing")
+  -- drawImage crosses colour modes on its own, so a still frame no longer
+  -- needs a sprite opened and put through ChangePixelFormat to be converted.
+  eq(#fake.app.commands, 0, "no conversion round trip was needed")
+  eq(reports[1].sprite.layers[1]:cel(1).image.colorMode, fake.ColorMode.RGB,
+     "the cel was composited in rgb")
 end)
 
 suite("build: a uniform indexed palette is preserved without requantizing", function()
@@ -327,16 +342,21 @@ suite("build: colorMode 'same as first source'", function()
 end)
 
 suite("sources: pool closes what it opened and leaves user tabs alone", function()
-  local reports, errors, grouped, pool, cfg = buildFrom { { "hero_run_00" }, { "hero_run_01" } }
-  local opened = {}
-  for _, s in ipairs(pool.order) do opened[#opened + 1] = s end
-  eq(#opened, 2, "two sprites were opened")
+  fake.reset()
+  -- Only a file that genuinely holds an animation still needs a document; a
+  -- still frame is read as an image and never reaches the pool at all.
+  fake.files["/art/hero_run.gif"] = { width = 16, height = 16, frameCount = 3 }
+  local cfg = config.new()
+  local pool = sources.newPool()
+  local opened = sources.spriteFor(pool, { title = "hero_run", path = "/art/hero_run.gif" }, cfg)
+  check(opened ~= nil, "the animated file was opened")
+  eq(#pool.order, 1, "and tracked as ours")
 
   local userSprite = fake.newSprite(16, 16, fake.ColorMode.RGB, { filename = "/art/hero_run_02.png" })
   sources.spriteFor(pool, { title = "hero_run_02", sprite = userSprite }, cfg)
   cfg.closeSources = false
   sources.release(pool, cfg)
-  for _, s in ipairs(opened) do check(s.closed, "opened sprite was closed") end
+  check(opened.closed, "the opened sprite was closed")
   check(not userSprite.closed, "the user's own sprite stayed open")
 end)
 
@@ -493,6 +513,39 @@ suite("build: a truncated drop still produces the whole character", function()
      "run 15-20", "and run is intact even though none of it survived the drop")
 end)
 
+suite("build: a folded sequence is not counted again from the folder", function()
+  fake.reset()
+  -- Aseprite folded hero_run_00..05 into one dropped sprite of 6 frames. The
+  -- folder completion then offers _01.._05 as files: reading them as images
+  -- would silently double the run.
+  local dir = {}
+  for i = 0, 5 do
+    local name = ("hero_run_%02d"):format(i)
+    fake.files["/art/" .. name .. ".png"] = { width = 16, height = 16 }
+    dir[#dir + 1] = name .. ".png"
+  end
+  fake.dirs["/art"] = dir
+
+  local folded = fake.newSprite(16, 16, fake.ColorMode.RGB,
+    { filename = "/art/hero_run_00.png", frameCount = 6 })
+  local entries = { { title = "hero_run_00", sprite = folded } }
+  for i = 1, 5 do
+    entries[#entries + 1] = { title = ("hero_run_%02d"):format(i),
+                              path = ("/art/hero_run_%02d.png"):format(i) }
+  end
+
+  local cfg = config.new()
+  local grouped = naming.group(entries, config.namingOpts(cfg))
+  local pool = sources.newPool()
+  local reports, errors, notes = builder.buildAll(grouped, cfg, { pool = pool })
+  eq(#errors, 0, "no errors")
+  eq(reports[1].frames, 6, "six frames, not eleven")
+  eq(#notes, 5, "the five it skipped were reported as notes")
+  local cached = 0
+  for _ in pairs(pool.images) do cached = cached + 1 end
+  eq(cached, 0, "and none of them were even read")
+end)
+
 suite("collect: only image files in the folder become entries", function()
   fake.reset()
   fake.dirs["/art"] = { "hero_run_00.png", "hero_run_01.png", "notes.txt", "sheet.aseprite" }
@@ -548,7 +601,8 @@ end)
 suite("append: the existing art keeps its own layer", function()
   local reports, _, dest = appendFrom { { "hero_run_00" }, { "hero_run_01" } }
   eq(#dest.layers, 2, "one layer added, not reused")
-  eq(next(dest.layers[1].celsByFrame), nil, "the original layer is untouched")
+  eq(dest.layers[1]:cel(1) ~= nil, true, "the original layer keeps its own art")
+  eq(dest.layers[1]:cel(4), nil, "and gains nothing from the append")
   local added = dest.layers[2]
   eq(added:cel(4) ~= nil, true, "first appended cel at frame 4")
   eq(added:cel(5) ~= nil, true, "second appended cel at frame 5")
@@ -556,14 +610,85 @@ suite("append: the existing art keeps its own layer", function()
   eq(reports[1].sprite.layers[2].name, "hero", "layer named after the base")
 end)
 
-suite("append: the target's canvas wins, oversized frames are cropped", function()
-  local reports = appendFrom({ { "hero_run_00", 32, 32 } }, nil, { width = 16, height = 16 })
+local function warnedAbout(report, text)
+  for _, w in ipairs(report.warnings) do
+    if w:find(text, 1, true) then return true end
+  end
+  return false
+end
+
+suite("append: the canvas grows to fit frames bigger than the target", function()
+  local reports, _, dest = appendFrom({ { "hero_run_00", 32, 32 } }, nil,
+    { width = 16, height = 16 })
   local r = reports[1]
-  eq(r.canvas.width, 16, "canvas width from the target")
-  eq(r.canvas.height, 16, "canvas height from the target")
-  eq(#r.warnings >= 1, true, "warned about the crop")
-  eq(r.warnings[1]:find("larger than the 16x16 canvas", 1, true) ~= nil, true,
-     "the warning says which canvas")
+  eq(r.canvas.width, 32, "canvas grew to the incoming width")
+  eq(r.canvas.height, 32, "canvas grew to the incoming height")
+  eq(dest.width .. "x" .. dest.height, "32x32", "the sprite itself was resized")
+  eq(warnedAbout(r, "canvas grew from 16x16 to 32x32"), true, "said so")
+  eq(warnedAbout(r, "will be cropped"), false, "nothing was cropped")
+end)
+
+suite("append: growing carries the existing art with it", function()
+  local _, _, dest = appendFrom({ { "hero_run_00", 32, 32 } }, { align = "center" },
+    { width = 16, height = 16 })
+  local kept = dest.layers[1]:cel(1)
+  eq(kept.position.x, 8, "existing art centred on the wider canvas")
+  eq(kept.position.y, 8, "and on the taller one")
+end)
+
+suite("append: growing to the top-left leaves the existing art in place", function()
+  local _, _, dest = appendFrom({ { "hero_run_00", 32, 32 } }, { align = "top-left" },
+    { width = 16, height = 16 })
+  local kept = dest.layers[1]:cel(1)
+  eq(kept.position.x, 0, "existing art stays at x 0")
+  eq(kept.position.y, 0, "and at y 0")
+  eq(dest.width .. "x" .. dest.height, "32x32", "the canvas still grew")
+end)
+
+suite("append: an unconfirmed shrink is refused, not applied", function()
+  local reports, _, dest = appendFrom({ { "hero_run_00", 8, 8 } },
+    { canvasMode = "custom", canvasWidth = 8, canvasHeight = 8 },
+    { width = 16, height = 16 })
+  eq(dest.width .. "x" .. dest.height, "16x16", "the target kept its size")
+  eq(reports[1].canvas.width, 16, "and the report agrees")
+  eq(warnedAbout(reports[1], "would crop the sprite being appended to"), true,
+     "explained why the request was not honoured")
+end)
+
+suite("append: a confirmed shrink is carried out as asked", function()
+  local reports, _, dest = appendFrom({ { "hero_run_00", 8, 8 } },
+    { canvasMode = "custom", canvasWidth = 32, canvasHeight = 32 },
+    { width = 64, height = 64 }, { allowShrink = true })
+  eq(dest.width .. "x" .. dest.height, "32x32", "shrunk to the size that was typed")
+  eq(reports[1].canvas.width, 32, "and the report agrees")
+  eq(warnedAbout(reports[1], "went from 64x64 to 32x32"), true, "said what it cost")
+  -- The 64x64 canvas was centred into 32x32, so everything moved up and left.
+  eq(dest.layers[1]:cel(1).position.x, -16, "existing art moved with the crop")
+end)
+
+suite("append: a derived canvas never shrinks the target, and says nothing", function()
+  local reports, _, dest = appendFrom({ { "hero_run_00", 8, 8 } }, { canvasMode = "max" },
+    { width = 64, height = 64 })
+  eq(dest.width .. "x" .. dest.height, "64x64", "left exactly as it was")
+  eq(warnedAbout(reports[1], "would crop"), false, "no warning for a size it never asked for")
+  eq(warnedAbout(reports[1], "canvas"), false, "and nothing about the canvas at all")
+end)
+
+suite("build: a custom canvas size is used as given", function()
+  local reports = buildFrom({ { "hero_run_00", 8, 8 } },
+    { canvasMode = "custom", canvasWidth = 48, canvasHeight = 24 })
+  local spr = reports[1].sprite
+  eq(spr.width .. "x" .. spr.height, "48x24", "sprite made at the custom size")
+  eq(reports[1].canvas.width, 48, "reported width")
+  eq(reports[1].canvas.height, 24, "reported height")
+end)
+
+suite("append: a custom canvas bigger than both grows the target to it", function()
+  local reports, _, dest = appendFrom({ { "hero_run_00", 8, 8 } },
+    { canvasMode = "custom", canvasWidth = 40, canvasHeight = 40 },
+    { width = 16, height = 16 })
+  eq(dest.width .. "x" .. dest.height, "40x40", "grown to the custom size")
+  eq(warnedAbout(reports[1], "canvas grew from 16x16 to 40x40"), true, "said so")
 end)
 
 suite("append: the target's color mode is kept, never converted", function()
