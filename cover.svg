@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="630" height="500" viewBox="0 0 630 500">
+  <title>Animation Auto-Tagger cover</title>
+
+  <!--
+    itch.io cover art, 630x500.
+
+    Two things drove the composition. Covers are seen small, in a grid, so the
+    only elements allowed to carry meaning at thumbnail size are the title and
+    the coloured tag bars; the filenames are deliberately texture, there to read
+    as "a pile of loose frames" rather than to be read. And the palette is the
+    extension's own tag colours, the ones it cycles through when colouring tags
+    on a timeline, so the cover and the thing it sells agree.
+  -->
+
+  <defs>
+    <pattern id="pixelgrid" width="10" height="10" patternUnits="userSpaceOnUse">
+      <path d="M10 0 L0 0 L0 10" fill="none" stroke="#FFFFFF" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="630" height="500" fill="#17131E"/>
+  <rect width="630" height="500" fill="url(#pixelgrid)"/>
+
+  <!-- ============================================================ title -->
+
+  <text x="44" y="66" font-family="Fira Sans, DejaVu Sans, sans-serif" font-size="13"
+        font-weight="600" letter-spacing="3.4" fill="#8B7F9A">ASEPRITE EXTENSION</text>
+
+  <text x="44" y="132" font-family="Fira Sans, DejaVu Sans, sans-serif" font-size="58"
+        font-weight="800" letter-spacing="-1" fill="#F1ECF7">ANIMATION</text>
+  <text x="44" y="192" font-family="Fira Sans, DejaVu Sans, sans-serif" font-size="58"
+        font-weight="800" letter-spacing="-1" fill="#A76BD1">AUTO-TAGGER</text>
+
+  <rect x="524" y="44" width="62" height="26" rx="3" fill="#A76BD1"/>
+  <text x="555" y="62" text-anchor="middle" font-family="Fira Sans, DejaVu Sans, sans-serif"
+        font-size="14" font-weight="700" fill="#17131E">v1.1</text>
+
+  <!-- ================================================ loose frame files -->
+
+  <g font-family="DejaVu Sans Mono, monospace" font-size="10.5" fill="#8B7F9A">
+    <g>
+      <rect x="44" y="283" width="176" height="20" rx="2" fill="#241D2E"/>
+      <rect x="44" y="283" width="4" height="20" fill="#A76BD1"/>
+      <text x="58" y="297">hero_idle_00.png</text>
+    </g>
+    <g>
+      <rect x="44" y="309" width="176" height="20" rx="2" fill="#241D2E"/>
+      <rect x="44" y="309" width="4" height="20" fill="#A76BD1"/>
+      <text x="58" y="323">hero_idle_01.png</text>
+    </g>
+    <g>
+      <rect x="44" y="335" width="176" height="20" rx="2" fill="#241D2E"/>
+      <rect x="44" y="335" width="4" height="20" fill="#A76BD1"/>
+      <text x="58" y="349">hero_idle_02.png</text>
+    </g>
+    <g>
+      <rect x="44" y="361" width="176" height="20" rx="2" fill="#241D2E"/>
+      <rect x="44" y="361" width="4" height="20" fill="#56C4EF"/>
+      <text x="58" y="375">hero_run_00.png</text>
+    </g>
+    <g>
+      <rect x="44" y="387" width="176" height="20" rx="2" fill="#241D2E"/>
+      <rect x="44" y="387" width="4" height="20" fill="#56C4EF"/>
+      <text x="58" y="401">hero_run_01.png</text>
+    </g>
+    <g>
+      <rect x="44" y="413" width="176" height="20" rx="2" fill="#241D2E"/>
+      <rect x="44" y="413" width="4" height="20" fill="#56C4EF"/>
+      <text x="58" y="427">hero_run_02.png</text>
+    </g>
+  </g>
+
+  <!-- ==================================================== blocky arrow -->
+
+  <g fill="#6B6076">
+    <rect x="234" y="350" width="32" height="8"/>
+    <rect x="266" y="342" width="8" height="24"/>
+    <rect x="274" y="346" width="8" height="16"/>
+    <rect x="282" y="350" width="8" height="8"/>
+  </g>
+
+  <!-- ================================================== tagged timeline -->
+
+  <g>
+    <!-- ten frame cells -->
+    <g fill="#2A2235">
+      <rect x="310" y="320" width="24" height="24" rx="2"/>
+      <rect x="338" y="320" width="24" height="24" rx="2"/>
+      <rect x="366" y="320" width="24" height="24" rx="2"/>
+      <rect x="394" y="320" width="24" height="24" rx="2"/>
+      <rect x="422" y="320" width="24" height="24" rx="2"/>
+      <rect x="450" y="320" width="24" height="24" rx="2"/>
+      <rect x="478" y="320" width="24" height="24" rx="2"/>
+      <rect x="506" y="320" width="24" height="24" rx="2"/>
+      <rect x="534" y="320" width="24" height="24" rx="2"/>
+      <rect x="562" y="320" width="24" height="24" rx="2"/>
+    </g>
+    <g font-family="DejaVu Sans Mono, monospace" font-size="10" fill="#6B6076" text-anchor="middle">
+      <text x="322" y="336">1</text>
+      <text x="350" y="336">2</text>
+      <text x="378" y="336">3</text>
+      <text x="406" y="336">4</text>
+      <text x="434" y="336">5</text>
+      <text x="462" y="336">6</text>
+      <text x="490" y="336">7</text>
+      <text x="518" y="336">8</text>
+      <text x="546" y="336">9</text>
+      <text x="574" y="336">10</text>
+    </g>
+
+    <!-- the tags themselves, the part that has to survive a thumbnail -->
+    <rect x="310" y="352" width="108" height="28" rx="3" fill="#A76BD1"/>
+    <text x="322" y="371" font-family="Fira Sans, DejaVu Sans, sans-serif" font-size="13"
+          font-weight="700" letter-spacing="1.2" fill="#17131E">IDLE</text>
+
+    <rect x="422" y="352" width="164" height="28" rx="3" fill="#56C4EF"/>
+    <text x="434" y="371" font-family="Fira Sans, DejaVu Sans, sans-serif" font-size="13"
+          font-weight="700" letter-spacing="1.2" fill="#17131E">RUN</text>
+
+    <text x="310" y="409" font-family="Fira Sans, DejaVu Sans, sans-serif" font-size="12"
+          font-weight="600" letter-spacing="2.2" fill="#8B7F9A">ONE SPRITE, ONE TAG PER ANIMATION</text>
+  </g>
+
+  <!-- ====================================== the tag palette, as a signature -->
+
+  <g>
+    <rect x="0" y="492" width="105" height="8" fill="#8347AD"/>
+    <rect x="105" y="492" width="105" height="8" fill="#3CB4E5"/>
+    <rect x="210" y="492" width="105" height="8" fill="#E5813C"/>
+    <rect x="315" y="492" width="105" height="8" fill="#5CB870"/>
+    <rect x="420" y="492" width="105" height="8" fill="#D65A7A"/>
+    <rect x="525" y="492" width="105" height="8" fill="#C9B33F"/>
+  </g>
+</svg>

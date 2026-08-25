@@ -142,11 +142,13 @@ MIT licensed, source on GitHub. Bug reports and pull requests welcome.
 
 ## Assets still to make
 
-**Cover image, 630 by 500.** Required by itch, and it is the only thing most
-people will ever see. The strongest version is the transformation itself: a
-column of numbered filenames on the left, an arrow, and a timeline strip on the
-right with two or three coloured tag bars under it. Readable at thumbnail size
-matters more than detail.
+**Cover image, 630 by 500.** Done: `cover.png`, drawn from `cover.svg`. It shows
+the transformation itself, a column of numbered filenames becoming a timeline
+with coloured tag bars, and it was checked at 315 and 200 pixels wide, where the
+title and the tag bars still read and the filenames collapse into texture. To
+change it, edit the SVG and re-export:
+
+    rsvg-convert -w 630 -h 500 cover.svg -o cover.png
 
 **A short GIF, twenty seconds at most.** This sells the tool better than any
 paragraph above. Frames dragged onto Aseprite, the prompt appearing, one
