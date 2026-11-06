@@ -78,11 +78,14 @@ megabyte. Three shots cut from one recording: a frame being dragged out of a
 folder of 47, the prompt listing the twelve animations it found with three of
 them unticked, and the built sprite with its colour-coded timeline. The middle
 shot is framed close enough to read, which is the reason it is cut rather than
-shown as one wide take.
+shown as one wide take. The character on the canvas is blurred, so the GIF is
+about the extension rather than the art it happened to be run on.
 
-Remade from a recording with:
+Remade from a recording with the two below. The blur's boxes are measured for
+this recording, so a new one needs them measured again (see the script):
 
     scripts/make-gif.sh recording.webm store/demo.gif --width 900 --fps 12
+    python3 store/blur_sprite.py store/demo.gif store/demo.gif
 
 **Three or four screenshots.** The drop prompt with its checkboxes. The full
 options dialog. A finished timeline with coloured tags. A before and after of
