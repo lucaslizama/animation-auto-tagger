@@ -27,143 +27,40 @@ workflow, extension
 
 ## Page body
 
-### The problem
+The body is `store/game-page.md`, written for Sublime Itch: its coloured words,
+folded sections, box and frame are Sublime Itch's Markdown, which turns into
+the inline styles itch keeps. To use it, put it in the Sublime Itch library as
+the project's game page, `Animation Auto-Tagger/_game-page.md`, and copy
+`store/demo.gif` into the library's `_media` folder as
+`animation-auto-tagger-demo.gif`. Copy HTML (or Save to itch) then uploads the
+GIF and gives the HTML for the page's description.
 
-Pixel art comes out of a folder looking like this:
+It is about a third of the length of the first draft. The six features each
+lead with one of the extension's tag colours, lightened to read on the dark
+page, in the order it paints them. The full option list and the limitations
+are folded away, since they matter to someone deciding whether it handles their
+naming scheme rather than to everyone.
 
-    hero_idle_00.png   hero_run_00.png   hero_attack_00.png
-    hero_idle_01.png   hero_run_01.png   hero_attack_01.png
-    hero_idle_02.png   hero_run_02.png   hero_attack_02.png
+## Theme
 
-Engines want the opposite: one sprite whose timeline holds every frame in order,
-with a tag per animation, because that is what an importer reads to make
-animation clips. Building it by hand is an afternoon of importing, dragging
-frames into order, and typing tag names.
+Edit theme on the game's page, with these values:
 
-Animation Auto-Tagger does it in one step.
+| Setting | Value |
+|---|---|
+| Background | `#17131E`, the cover's own dark |
+| Background image | `store/background.png`, repeat, top centre |
+| Column background (BG2) | `#241D2E` |
+| Text | `#F1ECF7` |
+| Link | `#56C4EF` |
+| Button | `#8347AD`, with white text |
+| Embed background | `#241D2E` |
 
-    hero_idle_00.png  ┐
-    hero_idle_01.png  ├──►  hero.aseprite   frames 1-2   tag "idle"
-    hero_run_00.png   │                     frames 3-5   tag "run"
-    hero_run_01.png   │
-    hero_run_02.png   ┘
+The background is an Aseprite timeline seen from far away: rows of frame cells
+with tag bars over the runs, in the extension's tag colours sunk to a third of
+their strength so it stays behind the column. It is a 480 by 360 tile that wraps
+both ways. To change it, edit the script and run it again:
 
-### The part that matters after the first day
-
-Building the sprite once is the easy half. The real work is what happens when
-the animation gets redrawn, and that is what this is built for.
-
-Set **Existing tags** to *replace matching* and an import becomes an update. An
-animation whose name matches a tag already on the sprite is written over the
-frames that tag spans, and the tag is resized to fit. Import six `run` frames
-over a tag holding three and it grows to six, with every tag after it sliding
-down to make room. Anything with no matching tag goes on the end.
-
-The tag itself is left alone. Its name, direction and colour stay as they were,
-because they belong to whoever made them; only the frames beneath change. A
-layer of the same name is reused rather than duplicated, so re-importing the same
-character refreshes one layer instead of stacking up a new one every time.
-
-All of it is a single undo step.
-
-### Import only what changed
-
-Every animation it detects gets a checkbox before anything is built. When a
-folder holds a whole character but only the walk cycle was redrawn, tick that one
-and leave the rest alone.
-
-### Put them in the order that makes sense
-
-A build lays the tags down alphabetically or in the order the files were read.
-Rearranging them is a separate command, on any sprite with more than one tag. The tags are listed as rows to be
-dragged into the order you want, with a Sort button for taking the whole list at
-once, and on applying it rearranges the timeline so the frames actually move: every layer, every cel position, every frame duration travels with its own
-tag, and the tags keep their names, directions and colours. Aseprite offers no
-way to do this short of dragging frame ranges around by hand. Tags that share
-frames are refused rather than guessed at, and it is one undo step like
-everything else.
-
-### Getting at it quickly
-
-The commands live under File ▸ Scripts ▸ Animation Auto-Tagger. The ones worth
-reaching fast have a second home too: building appears in the File menu beside
-Import, and reordering appears on the right-click menu of a tag in the timeline,
-where your hand already is when the order is what you are thinking about.
-
-For anything used daily, bind a key: Edit ▸ Keyboard Shortcuts, search for the
-command by name. Aseprite does not let an extension ship a default shortcut, so
-this is the one part you have to set up yourself.
-
-### Three ways in
-
-Point it at a folder. Or read the sprites already open. Or just drag frames onto
-Aseprite: a small prompt appears offering to build them, waits until the batch
-stops arriving rather than reacting to the first file, and sits alongside
-Aseprite's own windows instead of stacking a dialog on top of them.
-
-Aseprite's drag and drop quietly loses files past roughly the tenth one, so a
-drop of twenty frames can arrive as nine. Rather than build a broken animation
-out of the survivors, the missing frames are read back from the folder they came
-from. Dragging a single frame in is enough to rebuild the whole character.
-
-### Everything else it does
-
-Names are read as `base_animation_index` by default, and nearly every part of
-that is adjustable: the separator, whether the animation is the middle token or
-the last one or the whole name, numbers glued straight onto the name, files with
-no number at all, and a custom Lua pattern for anything the built-in rules miss.
-
-Canvas size follows the largest frame, the first frame, or a size typed in
-directly. Smaller frames are placed by an alignment setting, and bottom-centre is
-usually right for characters standing on a ground line. Frame duration is set in
-milliseconds, or taken from sources that carry timing of their own. Tags can run
-forward, reverse, ping-pong or ping-pong reverse, and can be given colours that
-make a long tag list readable on the timeline. A folder holding two characters
-can produce two sprites in one pass. Indexed art keeps its palette indices
-untouched when every source shares one palette.
-
-Still frames are read directly rather than opened, so building from a folder of
-eighty frames opens no tabs at all.
-
-### Getting it into an engine
-
-Save as `.aseprite` and let an importer handle it. Godot importer plugins read
-the tags and turn each one into its own animation clip, which is the whole reason
-for building a tagged timeline instead of a folder of loose frames. Failing that,
-**File ▸ Export Sprite Sheet** with JSON data writes the tags into the metadata
-under `frameTags`.
-
-### What it will not do
-
-Aseprite records an entry in its recent files list for every file it loads, deep
-enough inside the program that no script can prevent it. Importing a folder of
-frames will fill that list, and since it holds sixteen entries by default,
-whatever was there before gets pushed out. There is no way to read the list,
-prune it, or suppress the recording. Aseprite offers only clearing it outright,
-which would take genuine history with it, so this extension does not do that on
-anyone's behalf.
-
-The scripting interface has no drag and drop event either. That is why drops are
-detected by watching the open sprite list rather than handled directly, and why
-Aseprite still opens each dropped file in its own tab before the extension ever
-sees it.
-
-### Requirements
-
-Aseprite 1.3.15 or newer, tested against 1.3.18.2. The package is plain text, a
-manifest and a handful of Lua files, so the same file installs on Windows, macOS
-and Linux.
-
-Install through **Edit ▸ Preferences ▸ Extensions ▸ Add Extension**, then
-restart. If an older copy is already installed, remove it first: installing on
-top of it can leave old files behind. On Windows and macOS, double-clicking the file works too. The commands
-appear under **File ▸ Scripts**.
-
-### Source
-
-MIT licensed. The source is at
-https://github.com/lucaslizama/animation-auto-tagger, and bug reports and pull
-requests are welcome.
+    python3 store/make_background.py
 
 ## Assets still to make
 
